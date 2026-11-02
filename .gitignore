@@ -54,3 +54,6 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Local spike dispatch guards and receipts
+/spikes/paypal-payouts/.local/
