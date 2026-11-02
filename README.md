@@ -1,6 +1,6 @@
 # HackRef
 
-**Under development.** HackRef is being built for the PayPal AI Hackathon 2026, with a submission deadline of November 12, 2026. No application or working integrations are included yet.
+**Under development.** HackRef is being built for the PayPal AI Hackathon 2026, with a submission deadline of November 12, 2026. The full application is not implemented. An isolated [PayPal Payouts sandbox spike](spikes/paypal-payouts/README.md) is available; real sandbox access has not yet been verified.
 
 HackRef is an AI-assisted hackathon evaluation and approved prize-settlement platform. It connects software submission evidence to judging criteria, explainable assessments, human decisions, and PayPal payout records.
 
