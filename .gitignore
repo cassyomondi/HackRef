@@ -1,0 +1,56 @@
+# Node and package-manager caches (keep dependency lockfiles)
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Next.js, TypeScript, builds, and test artifacts
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# Environment files and local credentials
+.env
+.env.*
+!.env.example
+.aws/
+.secrets/
+*.pem
+*.key
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+.ipynb_checkpoints/
+
+# IDE, OS, logs, and temporary files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.log
+tmp/
+temp/
