@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  boolean,
   foreignKey,
   index,
   integer,
@@ -70,13 +71,38 @@ export const organizerUsers = pgTable(
     id: id(),
     email: text("email").notNull(),
     displayName: text("display_name").notNull(),
+    passwordHash: text("password_hash"),
     ...timestamps(),
   },
   (t) => [
     uniqueIndex("organizer_email_unique").on(sql`lower(${t.email})`),
+    uniqueIndex("one_provisioned_organizer")
+      .on(sql`(1)`)
+      .where(sql`${t.passwordHash} IS NOT NULL`),
     check("organizer_email_nonempty", sql`length(trim(${t.email})) > 0`),
   ],
 );
+
+export const organizerSessions = pgTable(
+  "organizer_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    organizerId: uuid("organizer_id")
+      .notNull()
+      .references(() => organizerUsers.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("session_expiry_idx").on(t.expiresAt)],
+);
+
+// A fixed global bucket bounds password work for this single-organizer MVP.
+export const loginLimits = pgTable("login_limits", {
+  key: text("key").primaryKey(),
+  attempts: integer("attempts").notNull(),
+  windowStartedAt: timestamp("window_started_at", {
+    withTimezone: true,
+  }).notNull(),
+});
 
 export const hackathonEvents = pgTable(
   "hackathon_events",
@@ -91,12 +117,14 @@ export const hackathonEvents = pgTable(
     deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
     budgetCents: integer("budget_cents").default(0).notNull(),
     currency: text("currency").default("USD").notNull(),
+    isDemo: boolean("is_demo").default(false).notNull(),
     ...timestamps(),
   },
   (t) => [
     check("event_budget_nonnegative", sql`${t.budgetCents} >= 0`),
     check("event_currency_usd", sql`${t.currency} = 'USD'`),
     index("event_organizer_idx").on(t.organizerId),
+    unique("one_event_per_organizer").on(t.organizerId),
   ],
 );
 
@@ -133,12 +161,18 @@ export const submissions = pgTable(
     teamName: text("team_name").notNull(),
     repositoryUrl: text("repository_url").notNull(),
     commitSha: text("commit_sha").notNull(),
+    repositoryOwner: text("repository_owner"),
+    githubRepositoryId: text("github_repository_id"),
+    claims: jsonb("claims").$type<string[]>().default([]).notNull(),
+    ownershipAttested: boolean("ownership_attested").default(false).notNull(),
+    isDemo: boolean("is_demo").default(false).notNull(),
     ...timestamps(),
   },
   (t) => [
     unique("submission_event_repository_unique").on(t.eventId, t.repositoryUrl),
     unique("submission_id_event_unique").on(t.id, t.eventId),
     check("submission_pinned_sha", sql`${t.commitSha} ~ '^[0-9a-f]{40}$'`),
+    check("submission_claims_array", sql`jsonb_typeof(${t.claims}) = 'array'`),
     check(
       "submission_github_url",
       sql`${t.repositoryUrl} ~ '^https://github[.]com/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$'`,
@@ -162,6 +196,15 @@ export const evaluationRuns = pgTable(
     evidenceVersion: text("evidence_version"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    attempts: integer("attempts").default(0).notNull(),
+    maxAttempts: integer("max_attempts").default(3).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    result: jsonb("result").$type<Record<string, unknown>>(),
     ...timestamps(),
   },
   (t) => [
@@ -183,6 +226,15 @@ export const evaluationRuns = pgTable(
     index("run_status_idx").on(t.status),
     index("run_submission_idx").on(t.submissionId, t.eventId),
     index("run_rubric_idx").on(t.rubricVersionId, t.eventId),
+    index("run_queue_idx").on(t.status, t.nextAttemptAt, t.leaseExpiresAt),
+    check(
+      "run_attempt_bounds",
+      sql`${t.attempts} >= 0 AND ${t.maxAttempts} BETWEEN 1 AND 5 AND ${t.attempts} <= ${t.maxAttempts}`,
+    ),
+    check(
+      "run_lease_state",
+      sql`(${t.status} = 'running' AND ${t.leaseToken} IS NOT NULL AND ${t.leaseExpiresAt} IS NOT NULL) OR (${t.status} <> 'running' AND ${t.leaseToken} IS NULL AND ${t.leaseExpiresAt} IS NULL)`,
+    ),
   ],
 );
 

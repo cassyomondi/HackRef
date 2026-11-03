@@ -1,8 +1,15 @@
 import Link from "next/link";
 import { Icon } from "./icon";
 import { Navigation } from "./navigation";
+import { LogoutButton } from "./auth-controls";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  organizerName,
+}: {
+  children: React.ReactNode;
+  organizerName: string;
+}) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[236px_minmax(0,1fr)]">
       <a href="#main-content" className="skip-link">
@@ -29,9 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="text-xs font-semibold text-slate-800">
               Organizer workspace
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Local foundation preview
-            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{organizerName}</p>
           </div>
         </div>
         <p className="mb-3 hidden px-8 text-[10px] font-semibold tracking-[0.16em] text-slate-400 lg:block">
@@ -50,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            PASS 1 · Foundation only
+            PASS 2 · Organizer workspace
           </div>
         </div>
       </aside>
@@ -61,9 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Icon name="chevron" width="12" height="12" />
             <span className="font-medium text-slate-800">Hackathon 2026</span>
           </div>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-amber-800">
-            PREVIEW · NO INTEGRATIONS
-          </span>
+          <LogoutButton />
         </header>
         <main
           id="main-content"
@@ -73,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <footer className="mx-5 mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-200 py-5 text-[11px] text-slate-500 sm:mx-8 lg:mx-10">
           <span>HackRef · Thoughtful judging. Traceable decisions.</span>
-          <span>Foundation preview · November 2026</span>
+          <span>PASS 2 · November 2026</span>
         </footer>
       </div>
     </div>

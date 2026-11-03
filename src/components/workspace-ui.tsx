@@ -39,10 +39,11 @@ export function PlaceholderNotice() {
       />
       <p>
         <strong className="font-semibold text-slate-700">
-          Foundation preview.
+          Planned judging workspace.
         </strong>{" "}
-        All metrics and empty states are placeholders. No database records are
-        loaded. Integrations and editing are not connected.
+        Metrics on this page are placeholders. Manage real records in
+        Submissions and Event & rubric. AI assessment, judging, analytics and
+        awards remain planned.
       </p>
     </div>
   );

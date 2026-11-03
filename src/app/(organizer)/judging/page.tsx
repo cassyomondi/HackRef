@@ -34,7 +34,7 @@ export default function Judging() {
         </Card>
         <Card
           title="Versioned rubric"
-          subtitle="No rubric loaded"
+          subtitle="Published criteria are available in Event & rubric"
           action={<PlannedBadge />}
         >
           <div className="p-5">
@@ -43,8 +43,9 @@ export default function Judging() {
               criteria remain traceable as your event evolves.
             </p>
             <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-4 text-xs leading-6 text-slate-500">
-              Rubric editing, AG Grid, Gemini and the evaluation worker are not
-              integrated in PASS 1.
+              Manage versioned criteria in Event & rubric and queue input checks
+              from a submission. AI assessment, AG Grid and Gemini remain
+              planned.
             </div>
           </div>
         </Card>

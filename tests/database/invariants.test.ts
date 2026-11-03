@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { loadEnvConfig } from "@next/env";
 import { Client } from "pg";
 import { parseServerEnvironment } from "../../src/lib/env-validation";
+import { testDatabaseUrl } from "../../src/lib/test-database";
 
 loadEnvConfig(process.cwd());
 
@@ -14,7 +15,7 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
     "Set TEST_DATABASE_URL to a dedicated local test database. See docs/DEVELOPMENT.md.",
   );
   const { DATABASE_URL } = parseServerEnvironment({
-    DATABASE_URL: process.env.TEST_DATABASE_URL,
+    DATABASE_URL: testDatabaseUrl(),
   });
   const client = new Client({
     connectionString: DATABASE_URL,
@@ -69,8 +70,12 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
       deadline_at: "2026-11-12T20:59:59Z",
       budget_cents: 10000,
     });
+    const otherOrganizer = await insert("organizer_users", {
+      email: "other@example.test",
+      display_name: "Other organizer (authorization fixture)",
+    });
     const otherEvent = await insert("hackathon_events", {
-      organizer_id: organizer,
+      organizer_id: otherOrganizer,
       slug: "other",
       name: "Other",
       deadline_at: "2026-11-12T20:59:59Z",

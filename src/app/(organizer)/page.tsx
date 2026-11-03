@@ -72,12 +72,12 @@ export default function Overview() {
         <StatCard
           icon="file"
           label="Submissions"
-          detail="Awaiting registered projects"
+          detail="See Submissions for the live registry"
         />
         <StatCard
           icon="scale"
           label="Assessments"
-          detail="Evaluation is not connected"
+          detail="AI assessments are not connected"
         />
         <StatCard
           icon="shield"
@@ -132,8 +132,8 @@ export default function Overview() {
         >
           <EmptyState
             icon="file"
-            title="A clean slate, ready for ideas"
-            description="No submissions are loaded in this preview. Repository registration and pinned-commit collection are planned for a later pass."
+            title="Your project registry is ready"
+            description="Open Submissions to register public GitHub repositories and inspect pinned commits. This overview does not display live submission records."
           />
         </Card>
         <Card
@@ -151,8 +151,8 @@ export default function Overview() {
                 detail: "Make judging criteria clear and consistent.",
               },
               {
-                title: "Connect the workflow",
-                detail: "Add authentication and evidence collection.",
+                title: "Prepare the evaluation queue",
+                detail: "Register projects and check their pinned inputs.",
               },
             ].map((item, i) => (
               <li key={item.title} className="flex items-start gap-3 py-4">
@@ -171,7 +171,7 @@ export default function Overview() {
             ))}
           </ul>
           <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3 text-[10px] text-slate-500">
-            Setup actions will be available after foundation review.
+            Event setup and versioned criteria are available in Event & rubric.
           </div>
         </Card>
       </div>

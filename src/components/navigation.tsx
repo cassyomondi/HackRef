@@ -7,6 +7,7 @@ import { Icon, type IconName } from "./icon";
 const destinations: Array<{ href: string; label: string; icon: IconName }> = [
   { href: "/", label: "Overview", icon: "grid" },
   { href: "/submissions", label: "Submissions", icon: "file" },
+  { href: "/event", label: "Event & rubric", icon: "calendar" },
   { href: "/judging", label: "Judging", icon: "scale" },
   { href: "/analytics", label: "Analytics", icon: "chart" },
   { href: "/awards", label: "Awards", icon: "trophy" },

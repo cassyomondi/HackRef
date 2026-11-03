@@ -1,22 +1,14 @@
 import "server-only";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
 import { getServerEnvironment } from "@/lib/env";
-import * as schema from "./schema";
+import { connectDatabase } from "./connection";
 
-const globalDatabase = globalThis as unknown as { hackrefPool?: Pool };
+const globalDatabase = globalThis as unknown as {
+  hackrefDatabase?: ReturnType<typeof connectDatabase>;
+};
 
-/** Lazy: the placeholder shell never opens a database connection. */
+/** Lazy: builds never connect to PostgreSQL. */
 export function getDatabase() {
   const { DATABASE_URL } = getServerEnvironment();
-  const pool =
-    globalDatabase.hackrefPool ??
-    new Pool({
-      connectionString: DATABASE_URL,
-      max: 5,
-      connectionTimeoutMillis: 5_000,
-      idleTimeoutMillis: 30_000,
-    });
-  globalDatabase.hackrefPool = pool;
-  return drizzle(pool, { schema });
+  globalDatabase.hackrefDatabase ??= connectDatabase(DATABASE_URL);
+  return globalDatabase.hackrefDatabase.db;
 }

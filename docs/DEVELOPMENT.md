@@ -1,5 +1,7 @@
 # Development: PASS 1
 
+> Historical PASS 1 notes, preserved for reference. PASS 2 now requires organizer authentication and a database. Use [PASS 2 operations and report](PASS2_REPORT.md) for current setup, migrations, tests, seed data and worker commands. PostgreSQL 16.15 in the existing Docker container was reachable and used for PASS 2 verification.
+
 ## Runtime and project layout
 
 Use WSL Ubuntu, Node 22.22.0 (`.nvmrc`) and npm 10.9.4. Keep the checkout on the Linux filesystem for good file watching. Open it with VS Code's WSL extension. Run all commands in the root directory. Dependencies are pinned in `package.json`; use `npm ci` for a reproducible installation from `package-lock.json`.
