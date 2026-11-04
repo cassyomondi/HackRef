@@ -28,9 +28,11 @@
     "organizer:setup": "node --import tsx scripts/setup-organizer.ts",
     "db:seed": "node --import tsx scripts/seed.ts",
     "db:test:setup": "node --import tsx scripts/setup-test-database.ts",
-    "worker": "node --conditions=react-server --import tsx scripts/worker.ts"
+    "worker": "node --conditions=react-server --import tsx scripts/worker.ts",
+    "gemini:contract": "node --conditions=react-server --import tsx scripts/gemini-contract.ts"
   },
   "dependencies": {
+    "@google/genai": "2.32.0",
     "@next/env": "16.4.4",
     "drizzle-orm": "0.45.4",
     "iron-session": "9.0.1",

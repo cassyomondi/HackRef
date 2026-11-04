@@ -6,6 +6,8 @@ import { AppError } from "./errors";
 import { ownedEvent, ownedSubmission } from "./event-service";
 import { resolveRepository, type GitHubFetch } from "./github";
 import { queueInput, rubricInput, submissionInput } from "./validation";
+import { AI_PIPELINE_VERSION } from "./evaluation/versions";
+import { MAX_MANUAL_RETRIES, retryIdentity } from "./evaluation/retry-identity";
 
 export const PIPELINE_VERSION = "pass2-input-validation-v1";
 export const LEASE_SECONDS = 60;
@@ -14,6 +16,7 @@ export async function queueEvaluation(
   db: Database,
   organizerId: string,
   input: unknown,
+  pipelineVersion = PIPELINE_VERSION,
 ) {
   const data = queueInput.parse(input);
   const submission = await ownedSubmission(db, organizerId, data.submissionId);
@@ -29,14 +32,14 @@ export async function queueEvaluation(
     .limit(1);
   if (!rubric)
     throw new AppError(404, "Rubric version not found for this event.");
-  const idempotencyKey = `${PIPELINE_VERSION}:${submission.id}:${submission.commitSha}:${rubric.id}`;
+  const idempotencyKey = `${pipelineVersion}:${submission.id}:${submission.commitSha}:${rubric.id}`;
   const [created] = await db
     .insert(evaluationRuns)
     .values({
       ...data,
       eventId: submission.eventId,
       idempotencyKey,
-      evidenceVersion: PIPELINE_VERSION,
+      evidenceVersion: pipelineVersion,
     })
     .onConflictDoNothing({ target: evaluationRuns.idempotencyKey })
     .returning();
@@ -66,6 +69,7 @@ export async function ownedJob(
 }
 
 export function publicJob(job: typeof evaluationRuns.$inferSelect) {
+  const retry = retryIdentity(job.idempotencyKey);
   return {
     id: job.id,
     submissionId: job.submissionId,
@@ -79,6 +83,14 @@ export function publicJob(job: typeof evaluationRuns.$inferSelect) {
     finishedAt: job.finishedAt?.toISOString() ?? null,
     lastError: job.lastError,
     result: job.result,
+    pipelineVersion: job.evidenceVersion,
+    modelVersion: job.modelVersion,
+    promptVersion: job.promptVersion,
+    retry,
+    maxManualRetries: MAX_MANUAL_RETRIES,
+    canRetry: job.status === "failed" && !!job.finishedAt && !job.leaseToken && !job.leaseExpiresAt &&
+      job.evidenceVersion === AI_PIPELINE_VERSION && (retry?.number ?? 0) < MAX_MANUAL_RETRIES &&
+      job.result?.assessment !== "DRAFT" && !job.result?.assessmentId,
   };
 }
 
@@ -86,13 +98,13 @@ export async function claimJob(db: Database) {
   return db.transaction(async (tx) => {
     // Exhausted abandoned jobs must become terminal even if no more work is queued.
     await tx.execute(
-      sql`UPDATE evaluation_runs SET status = 'failed', lease_token = NULL, lease_expires_at = NULL, finished_at = now(), updated_at = now(), last_error = 'Worker lease expired after the final attempt.' WHERE status = 'running' AND lease_expires_at <= now() AND attempts >= max_attempts AND evidence_version = ${PIPELINE_VERSION}`,
+      sql`UPDATE evaluation_runs SET status = 'failed', lease_token = NULL, lease_expires_at = NULL, finished_at = now(), updated_at = now(), last_error = 'Worker lease expired after the final attempt.' WHERE status = 'running' AND lease_expires_at <= now() AND attempts >= max_attempts AND evidence_version IN (${PIPELINE_VERSION}, ${AI_PIPELINE_VERSION})`,
     );
     const [candidate] = await tx
       .select()
       .from(evaluationRuns)
       .where(
-        sql`${evaluationRuns.evidenceVersion} = ${PIPELINE_VERSION} AND ${evaluationRuns.attempts} < ${evaluationRuns.maxAttempts} AND ((${evaluationRuns.status} = 'queued' AND ${evaluationRuns.nextAttemptAt} <= now()) OR (${evaluationRuns.status} = 'running' AND ${evaluationRuns.leaseExpiresAt} <= now()))`,
+        sql`${evaluationRuns.evidenceVersion} IN (${PIPELINE_VERSION}, ${AI_PIPELINE_VERSION}) AND ${evaluationRuns.attempts} < ${evaluationRuns.maxAttempts} AND ((${evaluationRuns.status} = 'queued' AND ${evaluationRuns.nextAttemptAt} <= now()) OR (${evaluationRuns.status} = 'running' AND ${evaluationRuns.leaseExpiresAt} <= now()))`,
       )
       .orderBy(evaluationRuns.nextAttemptAt, evaluationRuns.createdAt)
       .limit(1)
@@ -115,7 +127,7 @@ export async function claimJob(db: Database) {
   });
 }
 
-type ClaimedJob = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
+export type ClaimedJob = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
 
 export async function completeJob(
   db: Database,
@@ -144,17 +156,18 @@ export async function completeJob(
   return rows.length === 1;
 }
 
-export async function failJob(db: Database, job: ClaimedJob, error: unknown) {
+export async function failJob(db: Database, job: ClaimedJob, error: unknown, diagnostic?: Record<string, unknown>) {
   const retry =
     (!(error instanceof AppError) || error.retryable) &&
     job.attempts < job.maxAttempts;
   const message =
     error instanceof AppError
       ? error.message
-      : "Input validation failed because a dependency was unavailable.";
+      : "Evaluation failed because a dependency was unavailable.";
   const rows = await db
     .update(evaluationRuns)
     .set({
+      ...(diagnostic ? { result: diagnostic } : {}),
       status: retry ? "queued" : "failed",
       lastError: message,
       finishedAt: retry ? null : sql`now()`,
@@ -178,7 +191,12 @@ export async function processJob(
   db: Database,
   job: ClaimedJob,
   fetcher?: GitHubFetch,
+  modelOptions?: { transport: import("./evaluation/model").ModelTransport; model: string },
 ) {
+  if (job.evidenceVersion === AI_PIPELINE_VERSION) {
+    const { processAiJob } = await import("./evaluation/worker");
+    return processAiJob(db, job, fetcher, modelOptions);
+  }
   try {
     const [submission] = await db
       .select()

@@ -63,11 +63,12 @@ function rateLimitError(response: Response, authenticated: boolean) {
   );
 }
 
-async function getGitHub(
+export async function getGitHub(
   path: string,
   fetcher: GitHubFetch,
   token: string | undefined,
   shaOnly = false,
+  signal?: AbortSignal,
 ) {
   let response: Response;
   try {
@@ -82,7 +83,7 @@ async function getGitHub(
       },
       redirect: "error",
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
     });
   } catch {
     throw new AppError(
@@ -152,12 +153,13 @@ export async function resolveRepository(
   repositoryUrl: string,
   ref = "",
   fetcher: GitHubFetch = fetch,
+  signal?: AbortSignal,
 ) {
   const parsed = parseRepositoryUrl(repositoryUrl);
   // Read only at runtime inside this server-only module. Never return or log it.
   const token = process.env.GITHUB_API_TOKEN?.trim() || undefined;
   const path = `/repos/${parsed.owner}/${parsed.repository}`;
-  const info = metadata.safeParse(await getGitHub(path, fetcher, token));
+  const info = metadata.safeParse(await getGitHub(path, fetcher, token, false, signal));
   if (!info.success)
     throw new AppError(
       422,
@@ -178,6 +180,7 @@ export async function resolveRepository(
       fetcher,
       token,
       true,
+      signal,
     ),
   );
   if (!resolved.success)

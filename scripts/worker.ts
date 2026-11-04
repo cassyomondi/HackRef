@@ -13,8 +13,8 @@ async function main() {
   process.on("SIGTERM", stop);
   console.log(
     once
-      ? "PASS 2 worker: process at most one eligible job."
-      : "PASS 2 worker started. SIGINT/SIGTERM stops after the active job.",
+      ? "HackRef worker: process at most one eligible job (PASS 2 or AI draft)."
+      : "HackRef worker started. SIGINT/SIGTERM stops after the active job.",
   );
   try {
     do {
@@ -44,7 +44,7 @@ async function main() {
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
     await pool.end();
-    console.log("PASS 2 worker stopped.");
+    console.log("HackRef worker stopped.");
   }
 }
 main().catch(() => {
