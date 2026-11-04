@@ -1,55 +1,23 @@
 import type { Metadata } from "next";
-import {
-  Card,
-  EmptyState,
-  PageHeading,
-  PlaceholderNotice,
-  PlannedBadge,
-} from "@/components/workspace-ui";
+import { Card, EmptyState, PageHeading } from "@/components/workspace-ui";
+import { AssessmentReview } from "@/components/assessment-review";
+import { getDatabase } from "@/db/client";
+import { AppError } from "@/lib/errors";
+import { listReviews } from "@/lib/evaluation/reviews";
+import { requirePageOrganizer } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Judging" };
-
-export default function Judging() {
-  return (
-    <>
-      <PageHeading
-        eyebrow="ASSESS & REVIEW"
-        title="Judging"
-        description="Consistent criteria. Visible evidence. A human decision at every step."
-      />
-      <PlaceholderNotice />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <Card
-          title="Assessment workspace"
-          subtitle="AI recommendations will require organizer review"
-          action={<PlannedBadge />}
-        >
-          <EmptyState
-            icon="scale"
-            title="Nothing ready for review"
-            description="No assessments are loaded. Evaluation runs, evidence-linked findings, suggested scores and organizer decisions will appear here after the evaluation workflow is implemented."
-            href="/submissions"
-            linkLabel="View submissions"
-          />
-        </Card>
-        <Card
-          title="Versioned rubric"
-          subtitle="Published criteria are available in Event & rubric"
-          action={<PlannedBadge />}
-        >
-          <div className="p-5">
-            <p className="text-xs leading-6 text-slate-500">
-              Future assessments will reference an exact rubric version so
-              criteria remain traceable as your event evolves.
-            </p>
-            <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-4 text-xs leading-6 text-slate-500">
-              Manage versioned criteria in Event & rubric and queue input checks
-              from a submission. AI assessment, AG Grid and Gemini remain
-              planned.
-            </div>
-          </div>
-        </Card>
-      </div>
-    </>
-  );
+export default async function Judging() {
+  const organizer = await requirePageOrganizer();
+  const reviews = await listReviews(getDatabase(), organizer.id).catch((error) => {
+    if (error instanceof AppError && error.status === 404) return [];
+    throw error;
+  });
+  return <>
+    <PageHeading eyebrow="ASSESS & REVIEW" title="Judging" description="Versioned criteria, cited evidence and provisional scores for human review." />
+    <Card title="Draft assessments" subtitle="Latest 30 drafts · Refresh to load new assessments · No finalization or award actions">
+      {reviews.length ? <div className="space-y-5 p-5">{reviews.map((review) => <AssessmentReview key={review.id} review={review} />)}</div> :
+        <EmptyState icon="scale" title="Nothing ready for review" description="Queue an AI evaluation from a submission and start the worker. Completed draft assessments will appear here with citations and coverage limits." href="/submissions" linkLabel="View submissions" />}
+    </Card>
+  </>;
 }

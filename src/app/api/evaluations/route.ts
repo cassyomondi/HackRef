@@ -5,6 +5,8 @@ import { ownedEvent } from "@/lib/event-service";
 import { api, apiOrganizer, json, readJson } from "@/lib/http";
 import { publicJob, queueEvaluation } from "@/lib/jobs";
 import { uuidInput } from "@/lib/validation";
+import { AI_PIPELINE_VERSION } from "@/lib/evaluation/versions";
+import { listReviews } from "@/lib/evaluation/reviews";
 
 export const runtime = "nodejs";
 export async function GET(request: Request) {
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
       )
       .orderBy(desc(evaluationRuns.createdAt))
       .limit(200);
-    return json({ jobs: jobs.map(publicJob) });
+    return json({ jobs: jobs.map(publicJob), reviews: await listReviews(db, organizer.id, submissionId ?? undefined) });
   });
 }
 export async function POST(request: Request) {
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
       getDatabase(),
       organizer.id,
       await readJson(request),
+      AI_PIPELINE_VERSION,
     );
     return json(
       { job: publicJob(result.job), created: result.created },

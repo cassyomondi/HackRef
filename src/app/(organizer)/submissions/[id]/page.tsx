@@ -11,6 +11,7 @@ import { ownedSubmission } from "@/lib/event-service";
 import { publicJob } from "@/lib/jobs";
 import { requirePageOrganizer } from "@/lib/session";
 import { uuidInput } from "@/lib/validation";
+import { listReviews } from "@/lib/evaluation/reviews";
 
 export const metadata: Metadata = { title: "Submission details" };
 export default async function SubmissionDetails({
@@ -131,6 +132,7 @@ export default async function SubmissionDetails({
               version,
             }))}
             initialJobs={jobs.map(publicJob)}
+            initialReviews={await listReviews(db, organizer.id, submission.id)}
           />
         </Card>
       </div>
