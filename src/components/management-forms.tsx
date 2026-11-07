@@ -10,10 +10,8 @@ const buttonClass =
   "rounded-lg bg-teal-800 px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50";
 
 function ManagementForm({
-  kind,
   children,
 }: {
-  kind: "event" | "rubric" | "submission";
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -28,54 +26,21 @@ function ManagementForm({
     setError("");
     setSaved(false);
     try {
-      let data: unknown;
-      let path: string;
-      if (kind === "event") {
-        data = {
-          name: fields.get("name"),
-          slug: fields.get("slug"),
-          status: fields.get("status"),
-          deadlineAt: new Date(
-            `${String(fields.get("deadlineAt"))}Z`,
-          ).toISOString(),
-        };
-        path = "/api/event";
-      } else if (kind === "rubric") {
-        const criteria = String(fields.get("criteria"))
+      const data = {
+        name: fields.get("name"),
+        teamName: fields.get("teamName"),
+        repositoryUrl: fields.get("repositoryUrl"),
+        repositoryOwner: fields.get("repositoryOwner"),
+        ref: fields.get("ref"),
+        claims: String(fields.get("claims"))
           .split("\n")
-          .filter((v) => v.trim())
-          .map((line) => {
-            const parts = line.split("|").map((v) => v.trim());
-            if (parts.length !== 3)
-              throw new Error(
-                "Each criterion needs key | label | maximum score.",
-              );
-            return {
-              key: parts[0],
-              label: parts[1],
-              maxScore: Number(parts[2]),
-            };
-          });
-        data = { title: fields.get("title"), criteria };
-        path = "/api/rubrics";
-      } else {
-        data = {
-          name: fields.get("name"),
-          teamName: fields.get("teamName"),
-          repositoryUrl: fields.get("repositoryUrl"),
-          repositoryOwner: fields.get("repositoryOwner"),
-          ref: fields.get("ref"),
-          claims: String(fields.get("claims"))
-            .split("\n")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          ownershipAttested: fields.get("ownershipAttested") === "on",
-        };
-        path = "/api/submissions";
-      }
-      await apiRequest(path, kind === "event" ? "PUT" : "POST", data);
+          .map((v) => v.trim())
+          .filter(Boolean),
+        ownershipAttested: fields.get("ownershipAttested") === "on",
+      };
+      await apiRequest("/api/submissions", "POST", data);
       setSaved(true);
-      if (kind !== "event") form.reset();
+      form.reset();
       router.refresh();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to save.");
@@ -98,109 +63,22 @@ function ManagementForm({
       )}
       {saved && (
         <p role="status" className="text-teal-700">
-          {kind === "submission"
-            ? "Submission registered and commit pinned."
-            : "Saved."}
+          Submission registered and commit pinned.
         </p>
       )}
       <button disabled={pending} className={buttonClass}>
-        {pending
-          ? kind === "submission"
-            ? "Checking GitHub…"
-            : "Saving…"
-          : kind === "event"
-            ? "Save event"
-            : kind === "rubric"
-              ? "Publish new rubric version"
-              : "Register submission"}
+        {pending ? "Checking GitHub…" : "Register submission"}
       </button>
     </form>
   );
 }
 
-export function EventForm({
-  event,
-}: {
-  event?: { name: string; slug: string; status: string; deadlineAt: string };
-}) {
-  return (
-    <ManagementForm kind="event">
-      <label className="block">
-        Event name
-        <input
-          name="name"
-          required
-          maxLength={120}
-          defaultValue={event?.name}
-          className={fieldClass}
-        />
-      </label>
-      <label className="block">
-        Event slug
-        <input
-          name="slug"
-          required
-          maxLength={80}
-          pattern="[a-z0-9]+(-[a-z0-9]+)*"
-          defaultValue={event?.slug}
-          className={fieldClass}
-        />
-      </label>
-      <label className="block">
-        Deadline (UTC)
-        <input
-          name="deadlineAt"
-          type="datetime-local"
-          required
-          defaultValue={event?.deadlineAt.slice(0, 16)}
-          className={fieldClass}
-        />
-      </label>
-      <label className="block">
-        Status
-        <select
-          name="status"
-          defaultValue={event?.status ?? "draft"}
-          className={fieldClass}
-        >
-          {["draft", "open", "judging", "completed"].map((v) => (
-            <option key={v}>{v}</option>
-          ))}
-        </select>
-      </label>
-    </ManagementForm>
-  );
-}
-
-export function RubricForm() {
-  return (
-    <ManagementForm kind="rubric">
-      <label className="block">
-        Rubric title
-        <input name="title" required maxLength={120} className={fieldClass} />
-      </label>
-      <label className="block">
-        Criteria (one per line: key | label | maximum score)
-        <textarea
-          name="criteria"
-          required
-          rows={5}
-          maxLength={4000}
-          placeholder="quality | Engineering quality | 10"
-          className={fieldClass}
-        />
-      </label>
-      <p className="font-normal leading-5 text-slate-500">
-        Publishing creates an immutable version. Existing jobs retain their
-        original rubric.
-      </p>
-    </ManagementForm>
-  );
-}
+export { EventForm } from "./event-form";
+export { RubricForm } from "./rubric-form";
 
 export function SubmissionForm() {
   return (
-    <ManagementForm kind="submission">
+    <ManagementForm>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>
           Project name

@@ -18,7 +18,7 @@ export function Navigation() {
   return (
     <nav
       aria-label="Main navigation"
-      className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-col lg:gap-2 lg:px-5 lg:py-0"
+      className="grid grid-cols-2 gap-1 px-3 pb-3 sm:grid-cols-3 lg:flex lg:shrink-0 lg:flex-col lg:gap-1 lg:px-5 lg:pb-5"
     >
       {destinations.map(({ href, label, icon }) => {
         const active =
