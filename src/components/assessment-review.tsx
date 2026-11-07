@@ -1,13 +1,14 @@
 import Link from "next/link";
 import type { Review } from "@/lib/evaluation/reviews";
+import { FinalizeReview } from "./finalize-review";
 
 export function AssessmentReview({ review }: { review: Review }) {
-  return <article className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-xs leading-6 text-slate-600">
+  return <article id={`assessment-${review.id}`} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-xs leading-6 text-slate-600">
     <div className="flex flex-wrap justify-between gap-2">
       <Link className="font-semibold text-teal-800 underline" href={`/submissions/${review.submissionId}`}>{review.submissionName}</Link>
-      <span className="rounded bg-amber-50 px-2 font-semibold text-amber-800">DRAFT · Human review required</span>
+      <span className={`rounded px-2 font-semibold ${review.final ? "bg-teal-50 text-teal-800" : "bg-amber-50 text-amber-800"}`}>{review.final ? "HUMAN FINALIZED · AI draft preserved" : "DRAFT · Human review required"}</span>
     </div>
-    <p>{review.rationale}</p>
+    <p className="font-semibold text-amber-800">Original AI draft · suggested scores</p><p>{review.rationale}</p>
     <p>{review.rubric.title} · v{review.rubric.version}</p>
     <p className="break-all font-mono text-[10px]">Commit {review.commitSha}<br />Run {review.jobId}<br />{review.modelVersion} · {review.promptVersion} · {review.evidenceVersion}</p>
     {review.draft.criteria.map((criterion) => <section key={criterion.key} className="space-y-2 border-t border-slate-100 pt-3">
@@ -41,6 +42,15 @@ export function AssessmentReview({ review }: { review: Review }) {
         <pre className="max-h-72 overflow-auto rounded bg-slate-50 p-3 text-[10px]">{file.excerpt?.split("\n").map((line, i) => `${file.startLine + i}: ${line}`).join("\n")}</pre>
       </section>)}
     </details>
-    <p className="text-amber-800">Provisional static review. Source code and tests were never executed. Successful integrations are unverified. No award or payout action is available.</p>
+    <p className="text-amber-800">AI suggestions are provisional static review. Source code and tests were never executed by HackRef. Successful integrations are unverified.</p>
+    {review.final ? <section className="space-y-3 rounded-lg border border-teal-200 bg-teal-50 p-4">
+      <h3 className="text-sm font-semibold text-teal-900">Human-finalized assessment · v{review.final.version}</h3>
+      <p className="whitespace-pre-wrap">{review.final.rationale}</p>
+      <dl>{review.rubric.criteria.map((c) => <div key={c.key} className="border-t border-teal-100 py-2"><dt className="font-semibold">{c.label}: {review.final!.scores[c.key]} / {c.maxScore} · {review.final!.decisions[c.key].action === "accept" ? "AI suggestion accepted" : "Human override"}</dt><dd className="whitespace-pre-wrap">{review.final!.decisions[c.key].reason}</dd></div>)}</dl>
+      <p className="font-semibold">Final total: {Object.values(review.final.scores).reduce((sum, score) => sum + score, 0)} / {review.rubric.criteria.reduce((sum, c) => sum + c.maxScore, 0)}</p>
+      <p>Reviewed by {review.final.reviewer} · <time dateTime={review.final.finalizedAt}>{review.final.finalizedAt.replace("T", " ")} (UTC)</time></p>
+      <p className="break-all font-mono text-[10px]">Reviewer {review.final.reviewerId}<br />Assessment {review.final.id} · Source draft {review.id}</p>
+      <p>This decision is immutable. No winner, award or payout was authorized.</p>
+    </section> : <FinalizeReview key={review.id} review={review} />}
   </article>;
 }

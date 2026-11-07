@@ -209,7 +209,7 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
       },
     );
     await client.query(
-      "UPDATE assessments SET status = 'finalized', finalized_by = $1, finalized_at = now() WHERE id = $2",
+      "UPDATE assessments SET status = 'finalized', scores = '{\"quality\":8}', finalized_by = $1, finalized_at = now() WHERE id = $2",
       [organizer, assessment],
     );
     await t.test(
@@ -245,7 +245,7 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
       await rejectsSql(
         "UPDATE assessments SET status = 'draft', finalized_by = NULL, finalized_at = NULL WHERE id = $1",
         [assessment],
-        "23503",
+        "23514",
       );
     });
     const payout = await insert("payouts", {

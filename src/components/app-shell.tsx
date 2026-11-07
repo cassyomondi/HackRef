@@ -15,11 +15,11 @@ export function AppShell({
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
-      <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-y-auto lg:border-r lg:border-b-0">
+      <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:overflow-y-auto lg:border-r lg:border-b-0">
         <Link
           href="/"
           aria-label="HackRef overview"
-          className="flex items-center gap-2.5 px-6 py-5 lg:px-7 lg:py-8"
+          className="flex shrink-0 items-center gap-2.5 px-6 py-4 lg:px-7 lg:py-6"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-800 text-white">
             <Icon name="layers" width="22" height="22" />
@@ -28,11 +28,11 @@ export function AppShell({
             HackRef<span className="text-teal-600">.</span>
           </span>
         </Link>
-        <div className="mx-5 mb-7 hidden rounded-lg border border-slate-200 bg-slate-50/70 p-3 lg:flex lg:items-center lg:gap-3">
+        <div className="mx-5 mb-5 hidden shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 p-3 lg:flex lg:items-center lg:gap-3">
           <span className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-600">
             HR
           </span>
-          <div>
+          <div className="min-w-0 break-words">
             <p className="text-xs font-semibold text-slate-800">
               Organizer workspace
             </p>
@@ -43,21 +43,6 @@ export function AppShell({
           WORKSPACE
         </p>
         <Navigation />
-        <div className="mt-auto hidden px-5 pb-5 lg:block">
-          <div className="mb-5 rounded-xl border border-teal-100 bg-teal-50/60 p-4">
-            <Icon name="shield" className="mb-3 text-teal-700" />
-            <p className="text-xs font-semibold text-slate-800">
-              Evidence before decisions
-            </p>
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Human review stays at the heart of judging and award approval.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            PASS 2 · Organizer workspace
-          </div>
-        </div>
       </aside>
       <div className="min-w-0">
         <header className="flex min-h-17 flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-white/80 px-5 py-3 sm:px-8 lg:px-10">

@@ -71,11 +71,11 @@ export default async function EventPage() {
                   key={criterion.key}
                   className="flex justify-between gap-4 py-3"
                 >
-                  <span>
+                  <span className="min-w-0 break-words">
                     {criterion.label}{" "}
                     <code className="text-slate-400">({criterion.key})</code>
                   </span>
-                  <span>{criterion.maxScore} points</span>
+                  <span className="shrink-0">{criterion.maxScore} points</span>
                 </li>
               ))}
             </ul>

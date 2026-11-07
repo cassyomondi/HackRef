@@ -297,6 +297,9 @@ export const assessments = pgTable(
     status: assessmentStatus("status").default("draft").notNull(),
     scores: jsonb("scores").$type<Record<string, number>>().notNull(),
     rationale: text("rationale").notNull(),
+    // Human decisions are new versions; the original AI draft stays intact.
+    sourceDraftId: uuid("source_draft_id"),
+    criterionDecisions: jsonb("criterion_decisions").$type<Record<string, { action: "accept" | "override"; reason: string }>>(),
     finalizedBy: uuid("finalized_by").references(() => organizerUsers.id, {
       onDelete: "restrict",
     }),
@@ -304,6 +307,15 @@ export const assessments = pgTable(
     ...timestamps(),
   },
   (t) => [
+    unique("assessment_id_run_scope_unique").on(t.id, t.evaluationRunId, t.submissionId, t.eventId),
+    foreignKey({
+      name: "assessment_source_draft_scope_fk",
+      columns: [t.sourceDraftId, t.evaluationRunId, t.submissionId, t.eventId],
+      foreignColumns: [t.id, t.evaluationRunId, t.submissionId, t.eventId],
+    }).onDelete("restrict"),
+    unique("assessment_source_draft_unique").on(t.sourceDraftId),
+    uniqueIndex("assessment_one_review_per_run").on(t.evaluationRunId).where(sql`${t.sourceDraftId} IS NOT NULL`),
+    check("assessment_review_shape", sql`(${t.sourceDraftId} IS NULL AND ${t.criterionDecisions} IS NULL) OR (${t.sourceDraftId} IS NOT NULL AND ${t.sourceDraftId} <> ${t.id} AND ${t.status} = 'finalized' AND jsonb_typeof(${t.criterionDecisions}) = 'object' AND ${t.criterionDecisions} IS NOT NULL)`),
     foreignKey({
       name: "assessment_run_scope_fk",
       columns: [t.evaluationRunId, t.submissionId, t.eventId],

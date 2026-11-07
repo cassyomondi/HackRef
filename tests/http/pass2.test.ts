@@ -22,6 +22,7 @@ import { AI_PIPELINE_VERSION } from "../../src/lib/evaluation/versions";
 import { providerError } from "../../src/lib/evaluation/provider-errors";
 import { addRubric, registerSubmission, saveEvent } from "../../src/lib/event-service";
 import { queueEvaluation } from "../../src/lib/jobs";
+import { listReviews } from "../../src/lib/evaluation/reviews";
 import { githubFixture, submissionFixture } from "../helpers/github";
 
 async function availablePort() {
@@ -165,6 +166,7 @@ test(
             "/analytics",
             "/awards",
             `/submissions/${submission.id}`,
+            `/judging/${submission.id}`,
           ]) {
             const response = await request(path);
             assert.equal(response.status, 307, path);
@@ -184,6 +186,7 @@ test(
             ["/api/submissions", "POST"],
             ["/api/evaluations", "POST"],
             [`/api/evaluations/${submission.id}/retry`, "POST"],
+            [`/api/assessments/${submission.id}/finalize`, "POST"],
           ])
             assert.equal((await request(path, method, {})).status, 401, path);
           assert.equal(
@@ -387,13 +390,55 @@ test(
           const judging = await request("/judging");
           assert.equal(judging.status, 200);
           const html = await judging.text();
-          assert.match(html, /Human review required/);
-          assert.match(html, /mock-gemini-test-version/);
-          assert.match(html, /src\/app.ts/);
-          assert.match(html, /UNVERIFIED/);
+          assert.match(html, /Judge comparison/);
+          assert.match(html, /AI draft/);
+          const detail = await (await request(`/judging/${list.reviews[0].id}`)).text();
+          assert.match(detail, /Human review required/);
+          assert.match(detail, /mock-gemini-test-version/);
+          assert.match(detail, /src\/app.ts/);
+          assert.match(detail, /UNVERIFIED/);
+          assert.match(detail, /Review final decision/);
+          assert.ok(!detail.includes('<script id="repo-injection">'));
           assert.ok(!html.includes('<script id="repo-injection">'));
         },
       );
+
+      await t.test("finalization requires CSRF, exact rubric scores and explicit human confirmation; replay is idempotent", async () => {
+        const [review] = await listReviews(fixture.db, (await fixture.db.select().from(organizerUsers).where(eq(organizerUsers.email, "http@example.test")))[0].id);
+        assert.ok(review);
+        const path = `/api/assessments/${review.id}/finalize`;
+        const data = { criteria: review.rubric.criteria.map((c) => ({ key: c.key, action: "accept", score: review.scores[c.key] })), rationale: "Reviewed all citations and static evidence limitations.", confirm: true };
+        assert.equal((await request(path, "POST", data, { "x-csrf-token": "" })).status, 403);
+        assert.equal((await request(path, "POST", data, { origin: "https://evil.example" })).status, 403);
+        assert.equal((await request(path, "POST", data, { "sec-fetch-site": "cross-site" })).status, 403);
+        assert.equal((await request(path, "POST", { ...data, confirm: false })).status, 400);
+        assert.equal((await request(path, "POST", { ...data, criteria: [{ ...data.criteria[0], score: 100 }] })).status, 422);
+        const saved = await request(path, "POST", data); assert.equal(saved.status, 201);
+        const final = (await saved.json()).assessment;
+        assert.equal(final.status, "finalized"); assert.equal(final.sourceDraftId, review.id); assert.ok(final.finalizedAt);
+        const replay = await request(path, "POST", data); assert.equal(replay.status, 200); assert.equal((await replay.json()).assessment.id, final.id);
+        assert.equal((await request(path, "POST", { ...data, rationale: "A different later decision cannot replace this finalized record." })).status, 409);
+        const html = await (await request(`/judging/${review.id}`)).text();
+        assert.match(html, /Human-finalized assessment/); assert.match(html, /Original AI draft/); assert.match(html, /HTTP test organizer/);
+        assert.match(html, /This decision is immutable/); assert.ok(!html.includes("Review final decision"));
+        const analytics = await (await request("/analytics")).text();
+        assert.match(analytics, /No real submission data yet/); assert.match(analytics, /AG Studio/);
+      });
+
+      await t.test("foreign assessment pages and finalization endpoints hide other organizers' records", async () => {
+        const [other] = await fixture.db.insert(organizerUsers).values({ email: "foreign-review-http@example.test", displayName: "Foreign organizer" }).returning();
+        await saveEvent(fixture.db, other.id, { name: "Foreign event", slug: "foreign-http", status: "judging", deadlineAt: "2026-11-12T20:59:59Z" });
+        const foreign = await registerSubmission(fixture.db, other.id, submissionFixture, githubFixture);
+        const rubric = await addRubric(fixture.db, other.id, { title: "Foreign rubric", criteria: [{ key: "quality", label: "Quality", maxScore: 10 }] });
+        await queueEvaluation(fixture.db, other.id, { submissionId: foreign.id, rubricVersionId: rubric.id }, AI_PIPELINE_VERSION);
+        const job = await claimJob(fixture.db); assert.ok(job); await processJob(fixture.db, job, sourceFixture(), modelOptions);
+        const [review] = await listReviews(fixture.db, other.id);
+        // Next may have streamed the layout before notFound(), preserving status 200.
+        const detail = await (await request(`/judging/${review.id}`)).text();
+        assert.match(detail, /Page not found/); assert.ok(!detail.includes(review.modelVersion!));
+        assert.equal((await request(`/api/assessments/${review.id}/finalize`, "POST", {})).status, 404);
+        const html = await (await request("/judging")).text(); assert.ok(!html.includes(review.id)); assert.ok(!html.includes("Foreign rubric"));
+      });
 
       await t.test("invalid model output exposes an actionable failure without scores or a fabricated draft", async () => {
         const published = await request("/api/rubrics", "POST", { title: "Failure rubric", criteria: [{ key: "quality", label: "Quality", maxScore: 10 }] });
