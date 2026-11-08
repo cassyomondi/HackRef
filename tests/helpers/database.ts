@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import * as schema from "../../src/db/schema";
 import { testDatabaseUrl } from "../../src/lib/test-database";
 
-export async function isolatedDatabase() {
+export async function isolatedDatabase(throughTag?: string) {
   loadEnvConfig(process.cwd());
   const url = testDatabaseUrl();
   const name = `hackref_test_${randomUUID().replaceAll("-", "")}`;
@@ -30,9 +30,11 @@ export async function isolatedDatabase() {
       const journal = JSON.parse(
         await readFile("drizzle/meta/_journal.json", "utf8"),
       ) as { entries: Array<{ tag: string }> };
+      if (throughTag && !journal.entries.some(entry => entry.tag === throughTag)) throw new Error("Unknown fixture migration boundary.");
       for (const { tag } of journal.entries) {
         const migration = await readFile(`drizzle/${tag}.sql`, "utf8");
         await client.query(migration.replaceAll('"public".', `"${name}".`));
+        if (tag === throughTag) break;
       }
       await client.query("COMMIT");
     } catch (error) {
@@ -50,6 +52,7 @@ export async function isolatedDatabase() {
   const connection = new URL(url);
   connection.searchParams.set("options", `-c search_path=${name}`);
   return {
+    schemaName: name,
     db: drizzle(pool, { schema }),
     pool,
     connectionString: connection.toString(),

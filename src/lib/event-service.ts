@@ -9,6 +9,7 @@ import {
 import { AppError } from "./errors";
 import { resolveRepository, type GitHubFetch } from "./github";
 import { eventInput, rubricInput, submissionInput } from "./validation";
+import { committedAwardCents } from "./award-budget";
 
 export async function ownedEvent(db: Database, organizerId: string) {
   const [event] = await db
@@ -27,16 +28,23 @@ export async function saveEvent(
 ) {
   const data = eventInput.parse(input);
   return db.transaction(async (tx) => {
-    // Serialize creation with the singleton organizer, including concurrent first requests.
+    // Serialize creation, including concurrent first requests. NO KEY UPDATE
+    // permits the KEY SHARE foreign-key checks used by award/approval audits,
+    // so an event edit waiting for the budget lock cannot deadlock an award.
     await tx
       .select({ id: organizerUsers.id })
       .from(organizerUsers)
       .where(eq(organizerUsers.id, organizerId))
-      .for("update");
+      .for("no key update");
     const [current] = await tx
       .select()
       .from(hackathonEvents)
-      .where(eq(hackathonEvents.organizerId, organizerId));
+      .where(eq(hackathonEvents.organizerId, organizerId))
+      .for("update");
+    if (current && data.budgetCents !== undefined && data.budgetCents < await committedAwardCents(tx, current.id)) {
+      const message = "The budget cannot be below the total reserved by allocated and approved awards.";
+      throw new AppError(409, message, false, undefined, [{ field: "budgetCents", message }]);
+    }
     const values = { ...data, deadlineAt: new Date(data.deadlineAt) };
     const [saved] = current
       ? await tx

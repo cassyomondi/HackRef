@@ -7,9 +7,9 @@ import { hashPassword } from "../src/lib/password";
 import { cliDatabase } from "./cli-database";
 
 async function secret(prompt: string): Promise<string> {
-  stdout.write(prompt);
+  // Disable terminal echo before publishing the prompt. A PTY client can
+  // respond as soon as the prompt is visible.
   stdin.setRawMode(true);
-  stdin.resume();
   return new Promise((resolve, reject) => {
     let value = "";
     function finish(error?: Error) {
@@ -33,6 +33,8 @@ async function secret(prompt: string): Promise<string> {
       }
     }
     stdin.on("data", onData);
+    stdout.write(prompt);
+    stdin.resume();
   });
 }
 

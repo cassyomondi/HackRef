@@ -44,6 +44,7 @@ export default async function EventPage() {
                     slug: event.slug,
                     status: event.status,
                     deadlineAt: event.deadlineAt.toISOString(),
+                    budgetCents: event.budgetCents,
                   }
                 : undefined
             }

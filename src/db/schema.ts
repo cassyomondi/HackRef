@@ -463,6 +463,22 @@ export const payouts = pgTable(
     paypalBatchId: text("paypal_batch_id"),
     paypalItemId: text("paypal_item_id").unique(),
     reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    // Legacy records are never eligible for dispatch. Only new, explicitly
+    // authorized intents are prepared by the Stage B service.
+    dispatchState: text("dispatch_state").default("legacy").notNull(),
+    authorizedBy: uuid("authorized_by").references(() => organizerUsers.id, { onDelete: "restrict" }),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    recipientVerifiedAt: timestamp("recipient_verified_at", { withTimezone: true }),
+    dispatchClaim: uuid("dispatch_claim"),
+    dispatchStartedAt: timestamp("dispatch_started_at", { withTimezone: true }),
+    lastOutcome: text("last_outcome"),
+    stateVersion: integer("state_version").default(0).notNull(),
+    itemStatus: text("item_status"),
+    evidence: jsonb("evidence").$type<{
+      batchId: string; itemId: string; senderBatchId: string; senderItemId: string;
+      batchStatus: string; itemStatus: string; amount: string; currency: "USD";
+      recipientMatched: true;
+    }>(),
     ...timestamps(),
   },
   (t) => [
@@ -476,6 +492,9 @@ export const payouts = pgTable(
       "payout_success_has_item",
       sql`${t.status} <> 'succeeded' OR (${t.paypalItemId} IS NOT NULL AND ${t.reconciledAt} IS NOT NULL)`,
     ),
+    check("payout_dispatch_shape", sql`${t.dispatchState} IN ('legacy', 'prepared', 'started') AND (${t.dispatchState} = 'legacy' OR (${t.authorizedBy} IS NOT NULL AND ${t.authorizedAt} IS NOT NULL AND ${t.recipientVerifiedAt} IS NOT NULL)) AND ((${t.dispatchState} = 'started' AND ${t.dispatchClaim} IS NOT NULL AND ${t.dispatchStartedAt} IS NOT NULL) OR (${t.dispatchState} <> 'started' AND ${t.dispatchClaim} IS NULL AND ${t.dispatchStartedAt} IS NULL))`),
+    check("payout_state_version_nonnegative", sql`${t.stateVersion} >= 0`),
+    check("payout_item_success_evidence", sql`${t.dispatchState} = 'legacy' OR ${t.status} <> 'succeeded' OR coalesce((${t.itemStatus} = 'SUCCESS' AND ${t.evidence} IS NOT NULL AND ${t.evidence}->>'itemStatus' = 'SUCCESS' AND ${t.evidence}->>'itemId' = ${t.paypalItemId} AND ${t.evidence}->>'batchId' = ${t.paypalBatchId} AND ${t.evidence}->>'recipientMatched' = 'true'), false)`),
     index("payout_status_idx").on(t.status),
   ],
 );

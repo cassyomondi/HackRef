@@ -126,6 +126,14 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
       scores: "{}",
       rationale: "For constraint tests only",
     });
+    const draftAssessment = await insert("assessments", {
+      event_id: event, submission_id: submission, evaluation_run_id: secondRun,
+      version: 1, scores: "{}", rationale: "Unfinalized allocation rejection fixture",
+    });
+    await client.query(
+      "UPDATE assessments SET status = 'finalized', scores = '{\"quality\":8}', finalized_by = $1, finalized_at = now() WHERE id = $2",
+      [organizer, assessment],
+    );
     const award = await insert("awards", {
       event_id: event,
       submission_id: submission,
@@ -199,18 +207,14 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
     const approvalSql =
       "INSERT INTO award_approvals (award_id, award_revision, assessment_id, amount_cents, currency, recipient_email, approved_by) VALUES ($1, 1, $2, $3, 'USD', $4, $5)";
     await t.test(
-      "a draft assessment cannot authorize an award approval",
+      "a draft assessment cannot authorize an award allocation",
       async () => {
         await rejectsSql(
-          approvalSql,
-          [award, assessment, 1000, "winner@example.test", organizer],
-          "23503",
+          "INSERT INTO awards (event_id, submission_id, assessment_id, title, amount_cents, recipient_email) VALUES ($1,$2,$3,'Draft allocation',1000,'winner@example.test')",
+          [event, submission, draftAssessment],
+          "23514",
         );
       },
-    );
-    await client.query(
-      "UPDATE assessments SET status = 'finalized', scores = '{\"quality\":8}', finalized_by = $1, finalized_at = now() WHERE id = $2",
-      [organizer, assessment],
     );
     await t.test(
       "approvals must match the exact recipient and amount",
@@ -240,7 +244,7 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
       await rejectsSql(
         "UPDATE awards SET amount_cents = 2000 WHERE id = $1",
         [award],
-        "23503",
+        "23514",
       );
       await rejectsSql(
         "UPDATE assessments SET status = 'draft', finalized_by = NULL, finalized_at = NULL WHERE id = $1",
@@ -270,7 +274,7 @@ test("PostgreSQL enforces provenance, approval terms and payout uniqueness", asy
         await rejectsSql(
           "UPDATE payouts SET approval_id = $1 WHERE id = $2",
           [randomUUID(), payout],
-          "23503",
+          "23514", // Permanent identity guard rejects before foreign-key checks.
         );
         await rejectsSql(
           "UPDATE payouts SET environment = 'live' WHERE id = $1",
