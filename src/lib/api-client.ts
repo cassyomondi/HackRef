@@ -1,5 +1,11 @@
 "use client";
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public fields: Array<{ field: string; message: string }>) {
+    super(message);
+  }
+}
+
 export async function apiRequest(path: string, method = "GET", data?: unknown) {
   const headers: Record<string, string> = {};
   if (method !== "GET") {
@@ -22,18 +28,15 @@ export async function apiRequest(path: string, method = "GET", data?: unknown) {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const fields = Array.isArray(result.fields)
-      ? result.fields
-          .map(
-            (f: { field: string; message: string }) =>
-              `${f.field}: ${f.message}`,
-          )
-          .join(" ")
-      : "";
-    throw new Error(
-      [result.error || "The request failed. Try again.", fields]
+    const fields: Array<{ field: string; message: string }> = Array.isArray(result.fields)
+      ? result.fields.filter((field: { field?: unknown; message?: unknown }) => typeof field.field === "string" && typeof field.message === "string")
+      : [];
+    throw new ApiError(
+      [result.error || "The request failed. Try again.", fields.map((field) => field.field ? `${field.field}: ${field.message}` : field.message).join(" ")]
         .filter(Boolean)
         .join(" "),
+      response.status,
+      fields,
     );
   }
   return result;

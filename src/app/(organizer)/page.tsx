@@ -87,7 +87,7 @@ export default function Overview() {
         <StatCard
           icon="trophy"
           label="Awards approved"
-          detail="No award workflow connected"
+          detail="See Awards for allocations and exact-term approvals"
         />
       </div>
       <Card

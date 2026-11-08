@@ -4,6 +4,7 @@ export class AppError extends Error {
     message: string,
     public retryable = false,
     public retryAt?: Date,
+    public fields?: Array<{ field: string; message: string }>,
   ) {
     super(message);
   }
@@ -21,6 +22,7 @@ export function appErrorResponse(error: AppError) {
   return Response.json(
     {
       error: error.message,
+      ...(error.fields ? { fields: error.fields } : {}),
       ...(error.retryAt ? { retryAt: error.retryAt.toISOString() } : {}),
     },
     { status: error.status, headers },

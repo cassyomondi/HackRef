@@ -1,4 +1,13 @@
 import { z } from "zod";
+import { budgetCentsInput } from "./awards-validation";
+
+export function validationFields(error: z.ZodError) {
+  return error.issues.map((issue) => ({
+    field: issue.path.join(".") || "request",
+    // Unknown keys can contain arbitrary text; do not echo them or Zod internals.
+    message: issue.code === "unrecognized_keys" ? "Remove unsupported fields from this request." : issue.message,
+  }));
+}
 
 const label = z.string().trim().min(1).max(120);
 export const uuidInput = z.uuid();
@@ -101,6 +110,8 @@ export const eventInput = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     deadlineAt: z.iso.datetime({ offset: true }),
     status: z.enum(["draft", "open", "judging", "completed"]),
+    // Omission preserves existing budgets for older clients.
+    budgetCents: budgetCentsInput.optional(),
   })
   .strict();
 

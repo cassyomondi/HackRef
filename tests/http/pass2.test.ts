@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:net";
@@ -8,6 +11,10 @@ import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import {
   organizerUsers,
+  hackathonEvents,
+  awards,
+  awardApprovals,
+  payouts,
   evaluationRuns,
   rubricVersions,
   submissions,
@@ -24,6 +31,8 @@ import { addRubric, registerSubmission, saveEvent } from "../../src/lib/event-se
 import { queueEvaluation } from "../../src/lib/jobs";
 import { listReviews } from "../../src/lib/evaluation/reviews";
 import { githubFixture, submissionFixture } from "../helpers/github";
+import { allocationFor, approvalFor, finalizedAwardProject } from "../helpers/awards";
+import { allocateAward } from "../../src/lib/awards";
 
 async function availablePort() {
   const server = createServer();
@@ -54,6 +63,10 @@ test(
   async (t) => {
     const fixture = await isolatedDatabase();
     let child: ChildProcess | undefined;
+    const mockDirectory = await mkdtemp(join(tmpdir(), "hackref-http-paypal-"));
+    const mockControl = join(mockDirectory, "control.json"), mockLog = join(mockDirectory, "requests.jsonl");
+    await writeFile(mockControl, JSON.stringify({ status: "PENDING" })); await writeFile(mockLog, "");
+    const providerRequests = async () => (await readFile(mockLog, "utf8")).trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
     try {
       const password = randomBytes(24).toString("base64url");
       await fixture.db.insert(organizerUsers).values({
@@ -72,6 +85,7 @@ test(
       child = spawn(
         process.execPath,
         [
+          "--import", resolve("tests/helpers/paypal-preload.mjs"),
           "node_modules/next/dist/bin/next",
           "start",
           "--hostname",
@@ -82,7 +96,8 @@ test(
         {
           env: {
             ...process.env,
-            NODE_ENV: "production",
+            NODE_ENV: "production", HACKREF_SANDBOX_PAYOUTS_ENABLED: "true", PAYPAL_SANDBOX_CLIENT_ID: "http-fixture-client", PAYPAL_SANDBOX_CLIENT_SECRET: "http-fixture-secret", PAYPAL_SANDBOX_RECIPIENT_EMAILS: "HttpRecipient+award@example.test",
+            HACKREF_MOCK_PAYPAL_LOG: mockLog, HACKREF_MOCK_PAYPAL_CONTROL: mockControl,
             DATABASE_URL: fixture.connectionString,
             SESSION_PASSWORD: randomBytes(48).toString("hex"),
             APP_ORIGIN: origin,
@@ -187,6 +202,8 @@ test(
             ["/api/evaluations", "POST"],
             [`/api/evaluations/${submission.id}/retry`, "POST"],
             [`/api/assessments/${submission.id}/finalize`, "POST"],
+            ["/api/awards", "POST"],
+            [`/api/awards/${submission.id}/approve`, "POST"],
           ])
             assert.equal((await request(path, method, {})).status, 401, path);
           assert.equal(
@@ -425,6 +442,120 @@ test(
         assert.match(analytics, /No real submission data yet/); assert.match(analytics, /AG Studio/);
       });
 
+      await t.test("event budget API accepts cents, preserves omitted budgets and returns safe field errors without changing other data", async () => {
+        const { event, rubrics } = await (await request("/api/event")).json();
+        const input = { name: event.name, slug: event.slug, deadlineAt: event.deadlineAt, status: event.status };
+        const { budgetCents: _, updatedAt: __, ...unchanged } = event; void _; void __;
+        const submissionBefore = await fixture.db.select().from(submissions);
+        for (const budgetCents of [100, 150, 100, 10]) {
+          const saved = await request("/api/event", "PUT", { ...input, budgetCents }); assert.equal(saved.status, 200);
+          assert.equal((await saved.json()).event.budgetCents, budgetCents);
+          const read = await (await request("/api/event")).json();
+          assert.equal(read.event.budgetCents, budgetCents); assert.deepEqual(read.rubrics, rubrics);
+          const { budgetCents: _, updatedAt: __, ...rest } = read.event; void _; void __;
+          assert.deepEqual(rest, unchanged);
+          assert.equal((await fixture.db.select().from(hackathonEvents).where(eq(hackathonEvents.id, event.id)))[0].budgetCents, budgetCents);
+        }
+        assert.equal((await request("/api/event", "PUT", input)).status, 200);
+        assert.equal((await (await request("/api/event")).json()).event.budgetCents, 10);
+        const beforeInvalid = await fixture.db.select().from(hackathonEvents).where(eq(hackathonEvents.id, event.id));
+        for (const budgetCents of ["1.00", 1.5, -1, 2147483648, null]) {
+          const invalid = await request("/api/event", "PUT", { ...input, budgetCents }); assert.equal(invalid.status, 400);
+          const body = await invalid.json(); assert.equal(body.fields[0].field, "budgetCents");
+          assert.match(body.fields[0].message, /budget|USD cents/i);
+          assert.doesNotMatch(JSON.stringify(body), /postgres|SELECT|INSERT|stack|password/i);
+        }
+        const unknown = await request("/api/event", "PUT", { ...input, private_unknown_key: "private-value" });
+        assert.equal(unknown.status, 400);
+        assert.deepEqual((await unknown.json()).fields, [{ field: "request", message: "Remove unsupported fields from this request." }]);
+        assert.deepEqual(await fixture.db.select().from(hackathonEvents).where(eq(hackathonEvents.id, event.id)), beforeInvalid);
+        assert.deepEqual(await fixture.db.select().from(submissions), submissionBefore);
+      });
+
+      await t.test("awards require origin, CSRF, confirmed recipients, budget and a separate exact-term approval", async () => {
+        const [owner] = await fixture.db.select().from(organizerUsers).where(eq(organizerUsers.email, "http@example.test"));
+        const [review] = await listReviews(fixture.db, owner.id); assert.ok(review.final);
+        const data = { submissionId: review.submissionId, assessmentId: review.final.id, title: "HTTP first prize", amountCents: 12551, currency: "USD", recipientEmail: "HttpRecipient+award@example.test", confirmRecipient: true };
+        const { event } = await (await request("/api/event")).json();
+        const eventData = { name: event.name, slug: event.slug, deadlineAt: event.deadlineAt, status: event.status, budgetCents: 0 };
+        assert.equal((await request("/api/event", "PUT", eventData)).status, 200);
+        assert.equal((await request("/api/awards", "POST", data)).status, 409);
+        assert.equal((await request("/api/event", "PUT", { ...eventData, budgetCents: 20001 })).status, 200);
+        for (const headers of ([{ "x-csrf-token": "" }, { origin: "https://evil.example" }, { origin: `${origin}/` }, { "sec-fetch-site": "cross-site" }] as Array<Record<string, string>>)) assert.equal((await request("/api/awards", "POST", data, headers)).status, 403);
+        for (const patch of [{ amountCents: 1.5 }, { amountCents: 0 }, { amountCents: "12551" }, { recipientEmail: "bad" }, { confirmRecipient: false }]) assert.equal((await request("/api/awards", "POST", { ...data, ...patch })).status, 400);
+        assert.equal((await request("/api/awards", "POST", { ...data, assessmentId: review.id })).status, 409);
+        const saved = await request("/api/awards", "POST", data); assert.equal(saved.status, 201);
+        const { awardId } = await saved.json();
+        const [award] = await fixture.db.select().from(awards).where(eq(awards.id, awardId));
+        assert.equal(award.amountCents, 12551); assert.equal(award.recipientEmail, data.recipientEmail);
+        assert.equal((await fixture.db.select().from(awardApprovals)).length, 0);
+        const register = await (await request("/awards")).text();
+        assert.match(register, /Draft allocation/); assert.ok(!register.includes(data.recipientEmail));
+        for (let i = 0; i < 2; i++) {
+          const preview = await (await request(`/awards/${award.id}`)).text();
+          assert.match(preview, /Review award terms/); assert.match(preview, /USD 125.51/); assert.ok(preview.includes(data.recipientEmail));
+        }
+        assert.equal((await fixture.db.select().from(awardApprovals)).length, 0, "Preview must not approve");
+        const terms = approvalFor(award); const path = `/api/awards/${award.id}/approve`;
+        for (const headers of ([{ "x-csrf-token": "" }, { origin: "https://evil.example" }, { "sec-fetch-site": "cross-site" }] as Array<Record<string, string>>)) assert.equal((await request(path, "POST", terms, headers)).status, 403);
+        assert.equal((await request(path, "POST", { ...terms, confirm: false })).status, 400);
+        assert.equal((await request(path, "POST", { ...terms, amountCents: 12552 })).status, 409);
+        assert.equal((await request("/api/awards", "POST", data)).status, 409);
+        assert.equal((await request(path, "PATCH", terms)).status, 405);
+        const responses = await Promise.all(Array.from({ length: 4 }, () => request(path, "POST", terms)));
+        assert.equal(responses.filter((response) => response.status === 201).length, 1);
+        assert.equal(responses.filter((response) => response.status === 200).length, 3);
+        const [approval] = await fixture.db.select().from(awardApprovals).where(eq(awardApprovals.awardId, award.id));
+        assert.equal(approval.amountCents, 12551); assert.equal(approval.recipientEmail, data.recipientEmail); assert.equal(approval.approvedBy, owner.id);
+        assert.equal((await request(path, "POST", { ...terms, recipientEmail: "changed@example.test" })).status, 409);
+        const budgetBefore = await fixture.db.select().from(hackathonEvents).where(eq(hackathonEvents.id, event.id));
+        const denied = await request("/api/event", "PUT", { ...eventData, budgetCents: 12550 });
+        assert.equal(denied.status, 409); assert.equal((await denied.json()).fields[0].field, "budgetCents");
+        assert.deepEqual(await fixture.db.select().from(hackathonEvents).where(eq(hackathonEvents.id, event.id)), budgetBefore);
+        assert.match(await (await request(`/awards/${award.id}`)).text(), /Award approved/);
+        assert.equal((await fixture.db.select().from(payouts)).length, 0);
+
+        assert.equal((await providerRequests()).length, 0, "Allocation, approval, preview and refresh must never contact PayPal");
+        const sendPath = `/api/awards/${award.id}/send-sandbox`, reconcilePath = `/api/awards/${award.id}/reconcile`;
+        const sendTerms = { ...terms, approvalId: approval.id, environment: "sandbox", confirmSandboxRecipient: true, confirmSandboxPayout: true };
+        for (const endpoint of [sendPath, reconcilePath]) {
+          assert.equal((await request(endpoint)).status, 405);
+          for (const headers of ([{ "x-csrf-token": "" }, { origin: "https://evil.example" }, { "sec-fetch-site": "cross-site" }] as Array<Record<string, string>>))
+            assert.equal((await request(endpoint, "POST", endpoint === sendPath ? sendTerms : {}, headers)).status, 403);
+        }
+        assert.equal((await request(sendPath, "POST", { ...sendTerms, confirmSandboxPayout: false })).status, 400);
+        assert.equal((await request(sendPath, "POST", { ...sendTerms, recipientEmail: "other@example.test" })).status, 409);
+        const sent = await Promise.all(Array.from({ length: 5 }, () => request(sendPath, "POST", sendTerms)));
+        assert.equal(sent.filter(r => r.status === 201).length, 1); assert.equal(sent.filter(r => r.status === 200).length, 4);
+        const [intent] = await fixture.db.select().from(payouts).where(eq(payouts.awardId, award.id));
+        assert.equal(intent.status, "pending"); assert.equal(intent.itemStatus, null);
+        assert.equal((await providerRequests()).filter(r => r.path === "/v1/payments/payouts").length, 1);
+        const pending = await (await request(reconcilePath, "POST", {})).json();
+        assert.equal(pending.payout.status, "pending"); assert.equal(pending.payout.itemStatus, "PENDING");
+        await writeFile(mockControl, JSON.stringify({ status: "SUCCESS", mismatch: true }));
+        const mismatch = await (await request(reconcilePath, "POST", {})).json();
+        assert.equal(mismatch.payout.lastOutcome, "CORRELATION_MISMATCH"); assert.notEqual(mismatch.payout.status, "succeeded");
+        await writeFile(mockControl, JSON.stringify({ status: "SUCCESS" }));
+        const success = await (await request(reconcilePath, "POST", {})).json();
+        assert.equal(success.payout.status, "succeeded"); assert.equal(success.payout.itemStatus, "SUCCESS");
+        const paidPage = await (await request(`/awards/${award.id}`)).text();
+        assert.match(paidPage, /matching individual item reports SUCCESS/); assert.match(paidPage, /fixture-item-1/);
+        assert.ok(!paidPage.includes(">Send sandbox payout<"));
+        assert.equal((await request(sendPath, "POST", sendTerms)).status, 200);
+        assert.equal((await providerRequests()).filter(r => r.path === "/v1/payments/payouts").length, 1);
+
+        const [other] = await fixture.db.insert(organizerUsers).values({ email: "foreign-award-http@example.test", displayName: "Foreign award organizer" }).returning();
+        await saveEvent(fixture.db, other.id, { ...eventData, slug: "foreign-award-http", budgetCents: 100000 });
+        const foreignProject = await finalizedAwardProject(fixture.db, other.id, "foreign-http");
+        const foreign = await allocateAward(fixture.db, other.id, allocationFor(foreignProject, "Foreign private prize"));
+        assert.equal((await request(`/api/awards/${foreign.id}/approve`, "POST", approvalFor(foreign))).status, 404);
+        assert.equal((await request("/api/awards", "POST", allocationFor(foreignProject, "Foreign attempt"))).status, 404);
+        assert.equal((await request(`/api/awards/${foreign.id}/send-sandbox`, "POST", { ...approvalFor(foreign), approvalId: approval.id, environment: "sandbox", confirmSandboxRecipient: true, confirmSandboxPayout: true })).status, 404);
+        assert.equal((await request(`/api/awards/${foreign.id}/reconcile`, "POST", {})).status, 404);
+        const foreignPage = await (await request(`/awards/${foreign.id}`)).text();
+        assert.match(foreignPage, /Page not found/); assert.ok(!foreignPage.includes(foreign.recipientEmail));
+      });
+
       await t.test("foreign assessment pages and finalization endpoints hide other organizers' records", async () => {
         const [other] = await fixture.db.insert(organizerUsers).values({ email: "foreign-review-http@example.test", displayName: "Foreign organizer" }).returning();
         await saveEvent(fixture.db, other.id, { name: "Foreign event", slug: "foreign-http", status: "judging", deadlineAt: "2026-11-12T20:59:59Z" });
@@ -557,8 +688,10 @@ test(
           const oldCookie = cookie;
           assert.equal((await request("/api/auth/logout", "POST")).status, 200);
           assert.equal((await request("/api/submissions")).status, 401);
+          for (const action of ["send-sandbox", "reconcile"]) assert.equal((await request(`/api/awards/00000000-0000-4000-8000-000000000001/${action}`, "POST", {})).status, 401);
           cookie = oldCookie;
           assert.equal((await request("/api/submissions")).status, 401);
+          for (const action of ["send-sandbox", "reconcile"]) assert.equal((await request(`/api/awards/00000000-0000-4000-8000-000000000001/${action}`, "POST", {})).status, 401);
           assert.equal((await request("/submissions")).status, 307);
           const [organizer] = await fixture.db
             .select()
@@ -570,6 +703,7 @@ test(
     } finally {
       if (child) await stop(child);
       await fixture.close();
+      await rm(mockDirectory, { recursive: true, force: true });
     }
   },
 );

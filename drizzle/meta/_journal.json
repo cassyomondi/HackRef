@@ -29,6 +29,20 @@
       "when": 1793867382999,
       "tag": "0003_human_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794077922618,
+      "tag": "0004_awards_stage_a",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794144591449,
+      "tag": "0005_awards_stage_b",
+      "breakpoints": true
     }
   ]
 }

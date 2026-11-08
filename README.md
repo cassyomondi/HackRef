@@ -1,6 +1,6 @@
 # HackRef
 
-**AI evaluation engine.** The Next.js organizer workspace supports secure login, one event, immutable rubric versions, public GitHub submissions and durable evaluation jobs. New jobs collect bounded source excerpts at the stored commit, request a structured Gemini review, validate citations and persist a DRAFT assessment. Submission details and Judging show real evidence, provisional scores and limitations for human review. Historical PASS 2 jobs still validate inputs only. Analytics, awards and overview metrics remain previews. The isolated [PayPal Payouts sandbox spike](spikes/paypal-payouts/README.md) remains separate and unchanged. Live Gemini account/model access has not been verified; automated integration tests use mocked providers.
+**Human judging, award approvals and SANDBOX payouts.** The organizer workspace supports secure login, one event, immutable rubrics and pinned submissions, durable Gemini evaluation jobs, human-finalized assessments, AG Grid and AG Studio. Awards reserve an exact USD amount and require separate organizer approval. Stage B adds an explicit sandbox send, permanent database dispatch claims and matched individual-item reconciliation. Sending is disabled by default and requires server-side sandbox credentials plus an operator-verified recipient allowlist. Approval never sends funds. Overview metrics remain previews. The isolated [PayPal spike](spikes/paypal-payouts/README.md) and its historical guard remain unchanged. Automated provider checks use injected HTTP fixtures.
 
 HackRef is an AI-assisted hackathon evaluation and approved prize-settlement platform. It connects software submission evidence to judging criteria, explainable assessments, human decisions, and PayPal payout records.
 
@@ -11,7 +11,7 @@ HackRef is an AI-assisted hackathon evaluation and approved prize-settlement pla
 3. Produce structured AI assessments with evidence references and explicit verification limits.
 4. Review findings and compare submissions using AG Grid and AG Studio.
 5. Finalize judging, allocate prizes, and explicitly approve each award.
-6. Initiate PayPal Payouts sandbox transfers and reconcile their actual item-level results.
+6. Separately confirm **Send sandbox payout**, then use **Reconcile status** to verify the matching individual payout item. Acceptance and batch SUCCESS alone never mean the recipient was paid.
 
 AI recommendations never authorize transfers. Every payout must remain traceable to its evidence, assessment, and organizer approval.
 
@@ -80,9 +80,9 @@ npm run build
 npm run test:http
 ```
 
-Production authentication requires an HTTPS `APP_ORIGIN`; serve `npm start` behind a TLS reverse proxy. Local functional verification uses `npm run dev` and loopback HTTP. If Turbopack cannot bind its internal port in a restricted environment, use `npm run build -- --webpack`; the supported Webpack build and production HTTP suite were verified for PASS 2. Root installation, builds and tests exclude `spikes/paypal-payouts/`; it retains its own dependencies and lockfile. No root command dispatches payouts or accesses PayPal.
+Production authentication requires an HTTPS `APP_ORIGIN`; serve `npm start` behind a TLS reverse proxy. Local functional verification uses `npm run dev` and loopback HTTP. If Turbopack cannot bind its internal port in a restricted environment, use `npm run build -- --webpack`; the supported Webpack build and production HTTP suite were verified for PASS 2. Root installation, builds and tests exclude `spikes/paypal-payouts/`; it retains its own dependencies and lockfile. Installation, checks and builds never send payouts. The running app contacts PayPal only through explicit organizer send/reconcile actions when privately configured. Provider integration tests inject mock HTTP and use disposable test schemas.
 
-See the [evaluation engine report](docs/EVALUATION_ENGINE_REPORT.md) for current evaluation behavior and [PASS 2 operations and report](docs/PASS2_REPORT.md) for the retained organizer foundation. The [foundation development notes](docs/DEVELOPMENT.md), [database design](docs/DATABASE.md), and [PASS 1 report](docs/FOUNDATION_REPORT.md) are preserved as history. AG Grid / AG Studio, final judging decisions, awards and application PayPal execution remain deferred.
+See the [Stage B implementation report](docs/AWARDS_STAGE_B_REPORT.md) for dispatch invariants, migration, automated verification, limitations and future operator-controlled sandbox verification. The [Stage A report](docs/AWARDS_STAGE_A_REPORT.md) documents the retained allocation and approval foundation; the [judging report](docs/JUDGING_ANALYTICS_REPORT.md) covers immutable human decisions and analytics. The [evaluation engine report](docs/EVALUATION_ENGINE_REPORT.md) and [PASS 2 operations](docs/PASS2_REPORT.md) cover the retained foundation. Earlier development and database documents are historical. Production/live-money payout capability is unavailable. Stage B has not been exercised against the real sandbox during implementation.
 
 ## License
 

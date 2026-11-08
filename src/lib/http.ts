@@ -6,6 +6,7 @@ import { authenticate } from "./auth-service";
 import { verifyCsrf } from "./csrf";
 import { AppError, appErrorResponse } from "./errors";
 import { getSession } from "./session";
+import { validationFields } from "./validation";
 
 export function json(data: unknown, status = 200) {
   return Response.json(data, {
@@ -26,10 +27,7 @@ export async function api(handler: () => Promise<Response>) {
       return json(
         {
           error: "Check the submitted fields.",
-          fields: error.issues.map((i) => ({
-            field: i.path.join("."),
-            message: i.message,
-          })),
+          fields: validationFields(error),
         },
         400,
       );
