@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { Card, EmptyState, PageHeading } from "@/components/workspace-ui";
-import { SubmissionForm } from "@/components/management-forms";
 import { getDatabase } from "@/db/client";
-import { hackathonEvents, submissions } from "@/db/schema";
+import { submissions } from "@/db/schema";
+import { ownedEvent } from "@/lib/event-service";
+import { AppError } from "@/lib/errors";
 import { requirePageOrganizer } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Submissions" };
@@ -12,11 +13,11 @@ export const metadata: Metadata = { title: "Submissions" };
 export default async function Submissions() {
   const organizer = await requirePageOrganizer();
   const db = getDatabase();
-  const [event] = await db
-    .select()
-    .from(hackathonEvents)
-    .where(eq(hackathonEvents.organizerId, organizer.id))
-    .limit(1);
+  const event = await ownedEvent(db, organizer.id).catch((error) => {
+    if (error instanceof AppError && error.status === 404) return null;
+    throw error;
+  });
+  const [totals] = event ? await db.select({ count: count() }).from(submissions).where(eq(submissions.eventId, event.id)) : [{ count: 0 }];
   const rows = event
     ? await db
         .select()
@@ -31,7 +32,9 @@ export default async function Submissions() {
         eyebrow="COLLECT & ORGANIZE"
         title="Submissions"
         description="Give every project a clear starting point and a traceable source."
-      />
+      >
+        <Link href="/submissions/new" className="rounded-lg bg-teal-800 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-900">+ Register submission</Link>
+      </PageHeading>
       {event?.isDemo && (
         <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
           DEMO DATA · {event.name}. Demo claims are examples and have not been
@@ -42,7 +45,7 @@ export default async function Submissions() {
         title="Project registry"
         subtitle={
           event
-            ? `${event.name} · ${rows.length} registered projects (latest 200)`
+            ? `${event.name} · ${totals.count} registered projects${totals.count > rows.length ? ` (showing latest ${rows.length})` : ""}`
             : "Create your event before registering projects"
         }
       >
@@ -115,16 +118,6 @@ export default async function Submissions() {
           />
         )}
       </Card>
-      {event && (
-        <div className="mt-6">
-          <Card
-            title="Register a submission"
-            subtitle="Public GitHub metadata only · repository code is never executed"
-          >
-            <SubmissionForm />
-          </Card>
-        </div>
-      )}
     </>
   );
 }

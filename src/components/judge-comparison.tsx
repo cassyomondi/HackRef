@@ -30,7 +30,7 @@ export function JudgeComparison({ rows }: { rows: ComparisonRow[] }) {
       { field: "state", headerName: "Review state", minWidth: 200, cellStyle: ({ data }) => ({ color: data?.finalScores ? "#115e59" : "#92400e", fontWeight: "600" }) },
       { field: "team", minWidth: 150 },
       { field: "rubric", minWidth: 200 },
-      { field: "commitSha", headerName: "Pinned SHA", minWidth: 160, tooltipField: "commitSha" },
+      { field: "commitSha", headerName: "Pinned SHA", minWidth: 160, tooltip: true },
       { field: "maximum", headerName: "Rubric maximum", filter: "agNumberColumnFilter", valueFormatter: missing },
       ...criterionColumns.flatMap((c): ColDef<ComparisonRow>[] => [
         { colId: `ai:${c.rubricId}:${c.key}`, headerName: `AI · ${c.label} / ${c.maxScore}`, headerTooltip: c.rubric, hide: !showAi || !showCriteria, filter: "agNumberColumnFilter", valueGetter: ({ data }) => data?.rubricId === c.rubricId ? data.aiScores[c.key] ?? null : null, valueFormatter: missing, cellStyle: { color: "#92400e", backgroundColor: "#fffbeb" } },

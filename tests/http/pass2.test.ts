@@ -176,6 +176,7 @@ test(
           for (const path of [
             "/",
             "/submissions",
+            "/submissions/new",
             "/event",
             "/judging",
             "/analytics",
@@ -273,7 +274,12 @@ test(
             ).status,
             403,
           );
-          assert.equal((await request("/submissions")).status, 200);
+          const registry = await (await request("/submissions")).text();
+          assert.match(registry, /\+ Register submission/);
+          assert.match(registry, /href="\/submissions\/new"/);
+          assert.doesNotMatch(registry, /name="repositoryUrl"/);
+          const newSubmission = await request("/submissions/new"); assert.equal(newSubmission.status, 200);
+          assert.match(await newSubmission.text(), /name="repositoryUrl"/);
         },
       );
 

@@ -38,10 +38,9 @@ function ManagementForm({
           .filter(Boolean),
         ownershipAttested: fields.get("ownershipAttested") === "on",
       };
-      await apiRequest("/api/submissions", "POST", data);
+      const result = await apiRequest("/api/submissions", "POST", data);
       setSaved(true);
-      form.reset();
-      router.refresh();
+      router.push(`/submissions/${encodeURIComponent(result.submission.id)}?registered=1`);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to save.");
     } finally {
@@ -53,7 +52,7 @@ function ManagementForm({
       onSubmit={submit}
       className="space-y-4 p-5 text-xs font-medium text-slate-600"
     >
-      <fieldset disabled={pending} className="space-y-4 disabled:opacity-60">
+      <fieldset disabled={pending || saved} className="space-y-4 disabled:opacity-60">
         {children}
       </fieldset>
       {error && (
@@ -62,12 +61,12 @@ function ManagementForm({
         </p>
       )}
       {saved && (
-        <p role="status" className="text-teal-700">
+        <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
           Submission registered and commit pinned.
         </p>
       )}
-      <button disabled={pending} className={buttonClass}>
-        {pending ? "Checking GitHub…" : "Register submission"}
+      <button disabled={pending || saved} className={buttonClass}>
+        {saved ? "Opening submission…" : pending ? "Checking GitHub…" : "Register submission"}
       </button>
     </form>
   );
