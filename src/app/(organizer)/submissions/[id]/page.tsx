@@ -16,8 +16,10 @@ import { listReviews } from "@/lib/evaluation/reviews";
 export const metadata: Metadata = { title: "Submission details" };
 export default async function SubmissionDetails({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ registered?: string }>;
 }) {
   const organizer = await requirePageOrganizer();
   const id = uuidInput.safeParse((await params).id);
@@ -58,6 +60,7 @@ export default async function SubmissionDetails({
         title={submission.name}
         description={`Submitted by ${submission.teamName}`}
       />
+      {(await searchParams).registered === "1" && <p role="status" className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">Submission registered and commit pinned.</p>}
       <div className="grid items-start gap-6 xl:grid-cols-2">
         <div className="space-y-6">
           <Card title="Repository snapshot">

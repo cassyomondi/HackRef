@@ -14,6 +14,12 @@ const record = (value) => appendFileSync(process.env.HACKREF_MOCK_PAYPAL_LOG, `$
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (/generativelanguage\.googleapis\.com$/.test(url.hostname)) throw new Error("Real model calls forbidden by test fixture.");
+  if (url.hostname === "api.github.com") {
+    const match = /^\/repos\/example\/(alpha|beta)(\/commits\/[^/]+)?$/.exec(url.pathname);
+    const repository = match && control().githubRepositories?.[match[1]];
+    if (!repository) throw new Error("Unexpected GitHub request forbidden by test fixture.");
+    return match[2] ? new Response(repository.commitSha) : Response.json({ id: repository.id, private: false, visibility: "public", full_name: `example/${match[1]}`, owner: { login: "example" }, default_branch: "main" });
+  }
   if (!/paypal\.com$/.test(url.hostname)) return original(input, init);
   if (url.origin !== "https://api-m.sandbox.paypal.com") throw new Error("Non-sandbox PayPal host forbidden.");
   const method = init?.method ?? "GET", path = url.pathname;
