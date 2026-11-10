@@ -68,7 +68,7 @@ The [judge setup](docs/JUDGE_SETUP.md) covers authentication, event/rubric creat
 - [Under-three-minute demo script and shot list](docs/DEMO_GUIDE.md)
 - [Ready-to-copy Devpost submission](docs/DEVPOST_SUBMISSION.md)
 
-**Public demo video: [TODO: paste final public YouTube URL].**
+**Public demo video: [Watch the HackRef demo](https://www.youtube.com/watch?v=mKrO_rARxl0).**
 
 ```bash
 npm run check

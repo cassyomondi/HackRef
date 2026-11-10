@@ -78,7 +78,7 @@ Payments are USD sandbox only. There is no live-money mode, automatic payout ret
 - Setup in submitted source: [Judge setup](https://github.com/cassyomondi/HackRef/blob/docs/hackathon-submission/docs/JUDGE_SETUP.md).
 - Recording plan: [Demo guide](https://github.com/cassyomondi/HackRef/blob/docs/hackathon-submission/docs/DEMO_GUIDE.md).
 - Public license: [root MIT LICENSE](https://github.com/cassyomondi/HackRef/blob/main/LICENSE).
-- **Public demo video: [TODO: paste final public YouTube URL].**
+- **Public demo video: [Watch the HackRef demo](https://www.youtube.com/watch?v=mKrO_rARxl0).**
 - Hosted application: **none claimed; reproduce locally using the setup guide**.
 
 The absolute documentation URLs above target `docs/hackathon-submission` and become usable only after that branch and these files are published. Before copying into Devpost, verify them signed out and preferably replace the branch ref with the final published commit SHA. A local branch is not judge-accessible. Do not invent a deployed URL.
