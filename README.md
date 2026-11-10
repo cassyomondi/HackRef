@@ -1,37 +1,42 @@
 # HackRef
 
-**Human judging, award approvals and SANDBOX payouts.** The organizer workspace supports secure login, one event, immutable rubrics and pinned submissions, durable Gemini evaluation jobs, human-finalized assessments, AG Grid and AG Studio. Awards reserve an exact USD amount and require separate organizer approval. Stage B adds an explicit sandbox send, permanent database dispatch claims and matched individual-item reconciliation. Sending is disabled by default and requires server-side sandbox credentials plus an operator-verified recipient allowlist. Approval never sends funds. Overview metrics remain previews. The isolated [PayPal spike](spikes/paypal-payouts/README.md) and its historical guard remain unchanged. Automated provider checks use injected HTTP fixtures.
+**Evidence-backed AI review, human judging, and explicitly approved PayPal sandbox awards.**
 
-HackRef is an AI-assisted hackathon evaluation and approved prize-settlement platform. It connects software submission evidence to judging criteria, explainable assessments, human decisions, and PayPal payout records.
+Hackathon organizers must compare unfamiliar repositories, explain their scores, and track prize payments. HackRef connects those steps in one organizer workspace, keeping evidence, human decisions, award approvals, and payment outcomes traceable.
 
-## Planned workflow
+## What works
 
-1. Register a public GitHub submission and pin its commit.
-2. Collect source and supporting evidence without executing the repository.
-3. Produce structured AI assessments with evidence references and explicit verification limits.
-4. Review findings and compare submissions using AG Grid and AG Studio.
-5. Finalize judging, allocate prizes, and explicitly approve each award.
-6. Separately confirm **Send sandbox payout**, then use **Reconcile status** to verify the matching individual payout item. Acceptance and batch SUCCESS alone never mean the recipient was paid.
+1. Configure an event, its USD prize budget, and immutable rubric versions.
+2. Register public GitHub repositories with explicit claims and ownership attestation. Branches and tags resolve to immutable commit SHAs.
+3. Queue durable PostgreSQL jobs. A separate worker collects bounded source excerpts and asks Gemini for structured, cited draft assessments. The submission showcase uses **Gemini 3.5 Flash Lite**.
+4. Inspect citations, uncertainty, omissions, and unscored criteria. Humans accept or override suggestions with reasoning and explicitly finalize immutable scores; the AI draft is preserved.
+5. Compare projects with **AG Grid Community** and explore native embedded **AG Studio** reports for progress, final scores, criterion comparisons, and evidence coverage.
+6. Allocate exact USD awards against the budget, explicitly approve their terms, then separately authorize **PayPal sandbox Payouts**. Reconciliation checks the matching individual item, recipient, currency, amount, and sender identifiers.
 
-AI recommendations never authorize transfers. Every payout must remain traceable to its evidence, assessment, and organizer approval.
+A genuine integrated **USD 0.10 sandbox payout was previously verified against the recipient sandbox account**. This is sandbox money. The four-project judging showcase and that separate payment verification are described in the [demo guide](docs/DEMO_GUIDE.md).
 
-## Architecture decisions
+## Architecture and integrations
 
-- Next.js and TypeScript for the web application and server APIs.
-- PostgreSQL and Drizzle for persistence, migrations, and transactional safeguards.
-- A durable evaluation worker backed by PostgreSQL.
-- GitHub static analysis as the default; optional runtime verification only in a separate isolated environment.
-- AG Grid for interactive judging and AG Studio for comparison and prize analytics.
-- Structured AI assessments validated by the application.
-- PayPal Payouts sandbox for approved prize settlement; no live-money transfers in the MVP.
+```text
+Organizer browser → Next.js 16 / React / TypeScript
+                       ├─ authenticated APIs → PostgreSQL / Drizzle
+                       ├─ registration → GitHub REST (public repo + pinned SHA)
+                       ├─ AG Grid comparison + embedded AG Studio analytics
+                       └─ explicit send/reconcile → PayPal sandbox Payouts REST
+PostgreSQL job queue → Node worker → GitHub excerpts → Gemini → AI draft
+Human review → immutable final → allocation → approval → separate send
+```
 
-See [MVP scope](docs/MVP_SCOPE.md) for boundaries, evidence statuses, and non-goals.
+PostgreSQL transactions and triggers protect immutable inputs, final decisions, budget reservations, approvals, and permanent payout dispatch records. Authentication uses a provisioned organizer, scrypt password hashing, encrypted HttpOnly cookies, database-backed sessions, and origin/CSRF checks. There are no default credentials or public signup.
 
-## Local setup
+**AI assists evaluation; it never selects winners or authorizes transfers.** AG Grid/Studio provide comparison and analytics. PayPal is the settlement integration. Render is an optional future hosting choice; no Render deployment is claimed.
 
-Run these commands at the repository root in WSL Ubuntu, using Node **22.22.0** and npm **10.9.4**:
+## Run locally
+
+Requirements: Node **22.22.0** (supported range `>=22.22.0 <23`), npm **10.9.4**, Docker Engine with Compose, and an interactive terminal. On a fresh checkout, at the repository root:
 
 ```bash
+nvm install
 nvm use
 npm ci
 cp -n .env.example .env
@@ -39,51 +44,42 @@ npm run db:up
 npm run db:migrate
 npm run auth:configure
 npm run organizer:setup
-# Optional, before creating a real event:
-npm run db:seed
 npm run dev
 ```
 
-Open **http://localhost:3000/login** using the exact origin in `APP_ORIGIN`. `auth:configure` generates a random cookie secret in ignored `.env` without printing it. `organizer:setup` prompts for an email, name and hidden password; there are no default credentials or public registration. If you do not use nvm, install Node 22.22.0 first and omit `nvm use`. In another terminal, run `npm run worker` to process evaluations. See [PASS 2 operations and report](docs/PASS2_REPORT.md) for password rotation, seed behavior, endpoints, worker recovery, verification and limitations.
+With a direct Node installation, omit the two nvm commands. `npm run organizer:setup` is a **one-time secure administrator bootstrap in an interactive terminal**. Afterward, use normal browser login at **http://localhost:3000/login**, matching `APP_ORIGIN` exactly. No web signup exists or is required. Review the [judge Quick Start](docs/JUDGE_SETUP.md#quick-start) before running database setup against an existing installation.
 
-Optional: set **`GITHUB_API_TOKEN`** in your ignored `.env` or server environment, then restart both the app and worker. Both use this server-only token for GitHub REST requests; leaving it unset preserves anonymous access. See [GitHub API authentication and rate limits](docs/PASS2_REPORT.md#github-api-authentication-and-rate-limits). No write permissions are needed, and repositories must still be public.
+For evaluations, privately configure `GEMINI_API_KEY` and **`GEMINI_MODEL=gemini-3.5-flash-lite`**, then run `npm run worker` in a second terminal at the same repository root. Registration/evaluation require network access; Gemini calls may incur charges. The code's fallback remains `gemini-2.5-flash`, so set the showcase model explicitly. PayPal sending stays disabled by default and is a separate, optional, authorized test.
 
-For AI evaluations, supply **`GEMINI_API_KEY`** to the worker through ignored server environment configuration. **`GEMINI_MODEL`** defaults to `gemini-2.5-flash`; choose an accessible model for your account. Restart the worker after configuration changes. Open a submission, select its rubric version and choose **Queue AI evaluation**. Run `npm run worker` and review the resulting draft in the submission or Judging page. See the [evaluation engine report](docs/EVALUATION_ENGINE_REPORT.md) for exact sample commands, evidence budgets, verification and limitations. Source code and submitted tests are never executed; AI assertions cannot verify working integrations.
+The [judge setup](docs/JUDGE_SETUP.md) covers authentication, event/rubric creation, registration, finalization, Studio licensing, PayPal safeguards, troubleshooting, and optional Render prerequisites. **Fresh installations contain neither the four-project judging showcase nor the prior PayPal payout record.** The optional local seed is an offline UI fixture and does not recreate them. Local login and event/rubric setup need no Gemini/PayPal credentials; generating AI drafts and testing payouts do. Dedicated judge Gemini access and PayPal test accounts/credentials remain unarranged in these materials; see [judge-access requirements and status](docs/JUDGE_SETUP.md#judge-access-requirements-and-status).
 
-Failed AI evaluations now offer **Retry evaluation**. Each original evaluation allows up to three manual retry runs; each preserves its failed parent and uses the same pinned submission/rubric. Repeating a retry request returns its existing child. See the [retry and provider-error report](docs/EVALUATION_RETRY_REPORT.md) for eligibility, concurrency guarantees and exact commands. HTTP 503 is treated as temporary Gemini unavailability, separately from authentication, permission and missing-model failures.
+## Boundaries
 
-Before spending a retry on a provider-contract failure, inspect the [Gemini contract investigation](docs/GEMINI_CONTRACT_REPORT.md). `npm run gemini:contract -- --describe` is offline. The explicit `npm run gemini:contract -- --live` makes one potentially billable request with the production schema/settings and synthetic evidence; it never accesses jobs, databases or real repositories. A passing contract test validates the generated output through the full server checks.
+- **Submitted repositories and their tests are never executed.** Runtime verification is not implemented. Static evidence cannot prove working software, passing tests, or successful integrations.
+- Source collection is bounded: at most 16 files, 16 KiB per file, 64 KiB fetched content and 24 KiB excerpts, with request/time limits and exclusions. Missing evidence remains unknown; AI findings remain `UNVERIFIED`, and unsupported criteria may be `NOT_EVALUATED`.
+- The MVP provisions one organizer and one event per organizer. No participant portal, multi-judge consensus, appeals/correction workflow, or automatic winner selection is implemented.
+- Awards and approvals are immutable. USD sandbox payouts only; no live-money mode, automatic redispatch, webhook settlement, or refund workflow. A timeout or batch success is not proof of recipient payment.
+- Demo fixtures are excluded from analytics. Compare matching rubric versions; equal scores remain ties and missing scores remain blank. Studio selections filter KPIs; **Clear all filters** restores full scope.
+- Gemini/GitHub availability, model access, and third-party entitlements remain external dependencies. Studio local evaluation may show vendor watermarks; hosted use requires appropriate Studio entitlement.
 
-For serving failures, use the [controlled A/B/C diagnostic](docs/GEMINI_DIAGNOSTIC_REPORT.md). Offline descriptions now read the worker's environment configuration and show the selected model. `--compare --describe` previews all three requests without calling Gemini; `--compare --live` explicitly opts into at most three bounded calls. A single-case diagnostic and diagnostic-only token-budget control are also available. HTTP 503 remains a serving-unavailability result.
+## Judge materials and validation
 
-## Local PostgreSQL
+- [Complete clean-room setup](docs/JUDGE_SETUP.md)
+- [Under-three-minute demo script and shot list](docs/DEMO_GUIDE.md)
+- [Ready-to-copy Devpost submission](docs/DEVPOST_SUBMISSION.md)
 
-Requires Docker Engine with the Compose plugin, accessible to your WSL user. PostgreSQL is pinned to `16.15-alpine`, persists in a named volume and binds only to `127.0.0.1:5433` by default.
-
-```bash
-# Run once; do not overwrite an existing .env.
-cp -n .env.example .env
-npm run db:up
-npm run db:migrate
-```
-
-The sample database password is for local development only. If port 5433 is occupied, change both `POSTGRES_PORT` and the port in `DATABASE_URL` in `.env`. `npm run db:down` stops the database without removing its volume. No reset command is provided. Demo seed data is optional, reproducible and clearly labeled; it never creates an organizer password.
+**Public demo video: [TODO: paste final public YouTube URL].**
 
 ```bash
-npm test
-npm run db:test:setup
-npm run test:db
-npm run typecheck
-npm run lint
+npm run check
 npm run db:check
-npm run build
-npm run test:http
+npm run build -- --webpack
 ```
 
-Production authentication requires an HTTPS `APP_ORIGIN`; serve `npm start` behind a TLS reverse proxy. Local functional verification uses `npm run dev` and loopback HTTP. If Turbopack cannot bind its internal port in a restricted environment, use `npm run build -- --webpack`; the supported Webpack build and production HTTP suite were verified for PASS 2. Root installation, builds and tests exclude `spikes/paypal-payouts/`; it retains its own dependencies and lockfile. Installation, checks and builds never send payouts. The running app contacts PayPal only through explicit organizer send/reconcile actions when privately configured. Provider integration tests inject mock HTTP and use disposable test schemas.
+These run unit tests, TypeScript, ESLint, migration-file consistency validation, and the Webpack production build. They do not apply migrations or send payments. `db:check` does not validate a running database. Production login requires HTTPS; use `npm run dev` for loopback HTTP reproduction.
 
-See the [Stage B implementation report](docs/AWARDS_STAGE_B_REPORT.md) for dispatch invariants, migration, automated verification, limitations and future operator-controlled sandbox verification. The [Stage A report](docs/AWARDS_STAGE_A_REPORT.md) documents the retained allocation and approval foundation; the [judging report](docs/JUDGING_ANALYTICS_REPORT.md) covers immutable human decisions and analytics. The [evaluation engine report](docs/EVALUATION_ENGINE_REPORT.md) and [PASS 2 operations](docs/PASS2_REPORT.md) cover the retained foundation. Earlier development and database documents are historical. Production/live-money payout capability is unavailable. Stage B has not been exercised against the real sandbox during implementation.
+A reproducible local working build satisfies the functional-demo requirement; hosting is optional under the [official submission rules](https://paypalaihackathon.devpost.com/rules). No deployed HackRef URL is claimed. Provide a public YouTube demo under three minutes, the final source revision, and private test-access arrangements in Devpost. Deadline: **November 12, 2026, 12:00 PM PST / 11:00 PM Nairobi (20:00 UTC)**.
 
 ## License
 
-[MIT](LICENSE), copyright 2026 Cassy Omondi. Third-party services and dependencies retain their own licenses and terms.
+HackRef source and documentation are public under the root **[MIT License](LICENSE)**, copyright 2026 Cassy Omondi. Third-party dependencies/services retain their own licenses and terms; HackRef's license does not grant AG Studio entitlement. Historical implementation reports remain in `docs/`; the three judge documents above describe the submission workflow.
